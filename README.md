@@ -29,6 +29,17 @@ Once published:
 npx za-toolbox bank fnb parse ./statement.pdf --format json --output statement.json
 ```
 
+## Private fixture workflow
+
+Real statements must stay out of git. For local parser hardening, place anonymized PDFs under the ignored `fixtures/private/` directory:
+
+```bash
+mkdir -p fixtures/private/extracted
+pnpm --filter za-toolbox start -- dev extract-text fixtures/private/fnb-sample-1.pdf --output fixtures/private/extracted/fnb-sample-1.txt
+```
+
+Review the extracted text manually, remove all personal information, then commit only a sanitized text fixture if it is useful for tests.
+
 ## Development
 
 ```bash
@@ -39,6 +50,17 @@ pnpm build
 ```
 
 The project targets Node.js `>=22.14.0` for npm trusted publishing compatibility.
+
+## Publishing
+
+The first public package is `za-toolbox`. Internal `@awesome-za/*` workspace packages are private in v1 and bundled into the CLI package at build time.
+
+Publishing is configured through GitHub trusted publishing. After npm-side trusted publishing is configured for `za-toolbox`, push a tag like:
+
+```bash
+git tag za-toolbox-v0.1.0
+git push origin za-toolbox-v0.1.0
+```
 
 ## Privacy rules
 

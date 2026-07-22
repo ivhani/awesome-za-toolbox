@@ -30,7 +30,7 @@ export async function parseFnbStatement(input: ParseInput): Promise<ParseResult<
 
   try {
     const { text } = await extractPdfText(input.filePath);
-    const parsed = parseText(text);
+    const parsed = parseFnbStatementText(text);
     const checks = buildChecks(parsed.statement);
     const warnings = [...parsed.warnings, ...checksToWarnings(checks)];
     const confidence = checks.some((check) => check.status === "failed") ? "medium" : "high";
@@ -48,10 +48,10 @@ export async function parseFnbStatement(input: ParseInput): Promise<ParseResult<
   }
 }
 
-function parseText(text: string): { statement: BankStatement; warnings: ParseWarning[] } {
+export function parseFnbStatementText(text: string): { statement: BankStatement; warnings: ParseWarning[] } {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const warnings: ParseWarning[] = [];
-  const period = parsePeriod(requiredMatch(lines, /^Period:\s*(.+)$/i, "Missing FNB statement period."));
+  const period = parsePeriod(requiredMatch(lines, /^(?:Period|Statement Period):\s*(.+)$/i, "Missing FNB statement period."));
   const transactionsStart = lines.findIndex((line) => /^Transactions:?$/i.test(line));
   const transactionLines = transactionsStart >= 0 ? lines.slice(transactionsStart + 1) : [];
   const transactions = transactionLines.flatMap((line) => {
@@ -70,10 +70,10 @@ function parseText(text: string): { statement: BankStatement; warnings: ParseWar
   return {
     statement: {
       institution: "FNB",
-      accountNumberMasked: optionalMatch(lines, /^Account:\s*(.+)$/i),
+      accountNumberMasked: optionalMatch(lines, /^(?:Account|Account Number):\s*(.+)$/i),
       period,
-      openingBalance: parseOptionalMoney(optionalMatch(lines, /^Opening Balance:\s*(.+)$/i)),
-      closingBalance: parseOptionalMoney(optionalMatch(lines, /^Closing Balance:\s*(.+)$/i)),
+      openingBalance: parseOptionalMoney(optionalMatch(lines, /^Opening Balance:?\s*(.+)$/i)),
+      closingBalance: parseOptionalMoney(optionalMatch(lines, /^Closing Balance:?\s*(.+)$/i)),
       transactions,
     },
     warnings,
@@ -81,23 +81,39 @@ function parseText(text: string): { statement: BankStatement; warnings: ParseWar
 }
 
 function parseTransaction(line: string): BankTransaction | undefined {
-  const parts = line.split("|").map((part) => part.trim());
-  if (parts.length < 4) {
+  if (/^(date|posting date)\b/i.test(line)) {
     return undefined;
   }
 
-  const [date, description, amount, balance, reference] = parts;
-  if (!date || !description || !amount || !balance) {
+  const parts = line.split("|").map((part) => part.trim());
+  if (parts.length >= 4) {
+    const [date, description, amount, balance, reference] = parts;
+    if (!date || !description || !amount || !balance) {
+      return undefined;
+    }
+
+    return {
+      date: parseDate(date),
+      description,
+      amount: parseMoney(amount),
+      currency: "ZAR",
+      balance: parseMoney(balance),
+      reference: reference || undefined,
+    };
+  }
+
+  const compactMatch = line.match(/^(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([(-]?(?:R|ZAR)?\s?[\d,\s]+\.\d{2}\)?)\s+([(-]?(?:R|ZAR)?\s?[\d,\s]+\.\d{2}\)?)\s*([A-Z0-9-]+)?$/i);
+  if (!compactMatch?.[1] || !compactMatch[2] || !compactMatch[3] || !compactMatch[4]) {
     return undefined;
   }
 
   return {
-    date: parseDate(date),
-    description,
-    amount: parseMoney(amount),
+    date: parseDate(compactMatch[1]),
+    description: compactMatch[2].trim(),
+    amount: parseMoney(compactMatch[3]),
     currency: "ZAR",
-    balance: parseMoney(balance),
-    reference: reference || undefined,
+    balance: parseMoney(compactMatch[4]),
+    reference: compactMatch[5]?.trim(),
   };
 }
 
@@ -162,7 +178,7 @@ function optionalMatch(lines: string[], pattern: RegExp): string | undefined {
 }
 
 function parsePeriod(value: string): StatementPeriod {
-  const match = value.match(/^(.+?)\s+to\s+(.+)$/i);
+  const match = value.match(/^(.+?)\s+(?:to|-)\s+(.+)$/i);
   if (!match?.[1] || !match[2]) {
     throw new Error(`Invalid period: ${value}`);
   }
@@ -178,6 +194,11 @@ function parseDate(value: string): string {
   const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (match?.[1] && match[2] && match[3]) {
     return `${match[3]}-${match[2]}-${match[1]}`;
+  }
+
+  const monthMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+  if (monthMatch?.[1] && monthMatch[2] && monthMatch[3]) {
+    return `${monthMatch[3]}-${monthNumber(monthMatch[2])}-${monthMatch[1].padStart(2, "0")}`;
   }
 
   throw new Error(`Invalid date: ${value}`);
@@ -197,4 +218,12 @@ function parseMoney(value: string): number {
   }
 
   return negativeMatch ? -roundMoney(amount) : roundMoney(amount);
+}
+
+function monthNumber(value: string): string {
+  const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(value.toLowerCase());
+  if (month < 0) {
+    throw new Error(`Invalid month: ${value}`);
+  }
+  return String(month + 1).padStart(2, "0");
 }

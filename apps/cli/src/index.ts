@@ -2,6 +2,7 @@
 import { writeFile } from "node:fs/promises";
 import { parseFnbStatement } from "@awesome-za/fnb";
 import { parseEjoburgStatement } from "@awesome-za/ejoburg";
+import { extractPdfText } from "@awesome-za/pdf-utils";
 import type { BankStatement, MunicipalStatement } from "@awesome-za/schemas";
 import type { ParseResult } from "@awesome-za/core";
 
@@ -16,6 +17,16 @@ interface CliOptions {
 
 async function main(argv: string[]): Promise<number> {
   const options = parseArgs(argv);
+  if (options.command.join(" ") === "dev extract-text") {
+    const output = await runExtractTextCommand(options);
+    if (options.output) {
+      await writeFile(options.output, output);
+    } else {
+      process.stdout.write(output);
+    }
+    return 0;
+  }
+
   const result = await runCommand(options);
 
   if (!result.ok) {
@@ -79,12 +90,30 @@ function parseArgs(argv: string[]): CliOptions {
     }
   }
 
+  if (positional[0] === "dev" && positional[1] === "extract-text") {
+    return {
+      command: positional.slice(0, 2),
+      filePath: positional[2],
+      format,
+      output,
+    };
+  }
+
   return {
     command: positional.slice(0, 3),
     filePath: positional[3],
     format,
     output,
   };
+}
+
+async function runExtractTextCommand(options: CliOptions): Promise<string> {
+  if (!options.filePath) {
+    throw new Error("Missing PDF path.");
+  }
+
+  const extracted = await extractPdfText(options.filePath);
+  return `${extracted.text}\n`;
 }
 
 async function runCommand(options: CliOptions): Promise<ParseResult<BankStatement | MunicipalStatement>> {
@@ -169,6 +198,7 @@ function printHelp(): void {
 Usage:
   za-toolbox bank fnb parse <pdf> --format json|csv --output <path>
   za-toolbox municipal ejoburg parse <pdf> --format json|csv --output <path>
+  za-toolbox dev extract-text <pdf> --output <path>
 
 Options:
   --format json|csv   Output format. Defaults to json.

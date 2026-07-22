@@ -2,6 +2,25 @@
   "name": "za-toolbox",
   "version": "0.1.0",
   "description": "CLI for local-first South African document conversion tools.",
+  "license": "MIT",
+  "keywords": [
+    "south-africa",
+    "pdf",
+    "bank-statement",
+    "municipal",
+    "fnb",
+    "ejoburg",
+    "cli"
+  ],
+  "homepage": "https://github.com/ivhani/awesome-za-toolbox#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivhani/awesome-za-toolbox.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/ivhani/awesome-za-toolbox/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,6 +28,10 @@
     "za-toolbox": "./dist/index.js"
   },
   "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=22.14.0"
   },

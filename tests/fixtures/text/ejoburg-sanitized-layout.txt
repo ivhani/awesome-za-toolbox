@@ -1,0 +1,12 @@
+CITY OF JOHANNESBURG MUNICIPAL STATEMENT
+Account Number: 123456789
+Statement Period: 2026-01-01 - 2026-01-31
+Opening Balance R500.00
+Closing Balance R750.00
+Charges
+Date Description Amount Reference
+2026-01-03 Electricity 300.00 ELEC
+2026-01-04 Water 100.00 WATER
+Payments
+Date Description Amount Reference
+2026-01-20 Payment received -150.00 EFT

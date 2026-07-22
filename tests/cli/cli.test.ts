@@ -75,6 +75,21 @@ test("CLI fails for unsupported output formats", () => {
   assert.match(result.stderr, /Unsupported format/);
 });
 
+test("CLI extracts PDF text for private fixture inspection", async () => {
+  const dir = await createTempDir("za-toolbox-cli-extract-");
+  const input = path.join(dir, "statement.pdf");
+  const output = path.join(dir, "statement.txt");
+  await createSyntheticPdf(input, [
+    "FNB BANK STATEMENT",
+    "Account Number: ****1234",
+  ]);
+
+  const result = runCli(["dev", "extract-text", input, "--output", output]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(await readFile(output, "utf8"), /FNB BANK STATEMENT/);
+});
+
 function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync(process.execPath, ["--import", "tsx", cliEntry, ...args], {
     cwd: repoRoot,

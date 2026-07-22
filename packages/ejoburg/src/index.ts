@@ -30,7 +30,7 @@ export async function parseEjoburgStatement(input: ParseInput): Promise<ParseRes
 
   try {
     const { text } = await extractPdfText(input.filePath);
-    const parsed = parseText(text);
+    const parsed = parseEjoburgStatementText(text);
     const checks = buildChecks(parsed.statement);
     const warnings = [...parsed.warnings, ...checksToWarnings(checks)];
     const confidence = checks.some((check) => check.status === "failed") ? "medium" : "high";
@@ -48,7 +48,7 @@ export async function parseEjoburgStatement(input: ParseInput): Promise<ParseRes
   }
 }
 
-function parseText(text: string): { statement: MunicipalStatement; warnings: ParseWarning[] } {
+export function parseEjoburgStatementText(text: string): { statement: MunicipalStatement; warnings: ParseWarning[] } {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const warnings: ParseWarning[] = [];
   const charges = parseSection(lines, "Charges", "Payments", warnings, "EJOBURG_CHARGE_SKIPPED");
@@ -61,10 +61,10 @@ function parseText(text: string): { statement: MunicipalStatement; warnings: Par
   return {
     statement: {
       municipality: "City of Johannesburg",
-      accountNumber: optionalMatch(lines, /^Account:\s*(.+)$/i),
-      billingPeriod: parsePeriod(requiredMatch(lines, /^Billing Period:\s*(.+)$/i, "Missing eJoburg billing period.")),
-      openingBalance: parseOptionalMoney(optionalMatch(lines, /^Opening Balance:\s*(.+)$/i)),
-      closingBalance: parseOptionalMoney(optionalMatch(lines, /^Closing Balance:\s*(.+)$/i)),
+      accountNumber: optionalMatch(lines, /^(?:Account|Account Number):\s*(.+)$/i),
+      billingPeriod: parsePeriod(requiredMatch(lines, /^(?:Billing Period|Statement Period):\s*(.+)$/i, "Missing eJoburg billing period.")),
+      openingBalance: parseOptionalMoney(optionalMatch(lines, /^Opening Balance:?\s*(.+)$/i)),
+      closingBalance: parseOptionalMoney(optionalMatch(lines, /^Closing Balance:?\s*(.+)$/i)),
       charges,
       payments,
     },
@@ -99,22 +99,37 @@ function parseSection(
 }
 
 function parseLineItem(line: string): MunicipalLineItem | undefined {
-  const parts = line.split("|").map((part) => part.trim());
-  if (parts.length < 3) {
+  if (/^(date|transaction date)\b/i.test(line)) {
     return undefined;
   }
 
-  const [date, description, amount, reference] = parts;
-  if (!date || !description || !amount) {
+  const parts = line.split("|").map((part) => part.trim());
+  if (parts.length >= 3) {
+    const [date, description, amount, reference] = parts;
+    if (!date || !description || !amount) {
+      return undefined;
+    }
+
+    return {
+      date: parseDate(date),
+      description,
+      amount: parseMoney(amount),
+      currency: "ZAR",
+      reference: reference || undefined,
+    };
+  }
+
+  const compactMatch = line.match(/^(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([(-]?(?:R|ZAR)?\s?[\d,\s]+\.\d{2}\)?)\s*([A-Z0-9-]+)?$/i);
+  if (!compactMatch?.[1] || !compactMatch[2] || !compactMatch[3]) {
     return undefined;
   }
 
   return {
-    date: parseDate(date),
-    description,
-    amount: parseMoney(amount),
+    date: parseDate(compactMatch[1]),
+    description: compactMatch[2].trim(),
+    amount: parseMoney(compactMatch[3]),
     currency: "ZAR",
-    reference: reference || undefined,
+    reference: compactMatch[4]?.trim(),
   };
 }
 
@@ -158,7 +173,7 @@ function optionalMatch(lines: string[], pattern: RegExp): string | undefined {
 }
 
 function parsePeriod(value: string): StatementPeriod {
-  const match = value.match(/^(.+?)\s+to\s+(.+)$/i);
+  const match = value.match(/^(.+?)\s+(?:to|-)\s+(.+)$/i);
   if (!match?.[1] || !match[2]) {
     throw new Error(`Invalid billing period: ${value}`);
   }
