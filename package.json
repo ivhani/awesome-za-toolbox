@@ -1,0 +1,23 @@
+{
+  "name": "awesome-za-toolbox-repo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first tools for converting South African documents into clean data.",
+  "type": "module",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean",
+    "test": "node --import tsx --test tests/unit/fnb.test.ts tests/unit/ejoburg.test.ts tests/cli/cli.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "tsx": "^4.20.5",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  }
+}

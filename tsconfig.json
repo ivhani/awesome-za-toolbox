@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "declaration": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@awesome-za/core": ["packages/core/src/index.ts"],
+      "@awesome-za/schemas": ["packages/schemas/src/index.ts"],
+      "@awesome-za/pdf-utils": ["packages/pdf-utils/src/index.ts"],
+      "@awesome-za/fnb": ["packages/fnb/src/index.ts"],
+      "@awesome-za/ejoburg": ["packages/ejoburg/src/index.ts"]
+    }
+  },
+  "include": ["apps/**/*.ts", "packages/**/*.ts", "tests/**/*.ts"]
+}

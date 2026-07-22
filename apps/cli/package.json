@@ -1,0 +1,33 @@
+{
+  "name": "za-toolbox",
+  "version": "0.1.0",
+  "description": "CLI for local-first South African document conversion tools.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "za-toolbox": "./dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+    "start": "tsx src/index.ts"
+  },
+  "devDependencies": {
+    "@awesome-za/ejoburg": "workspace:*",
+    "@awesome-za/fnb": "workspace:*",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "tsx": "^4.20.5"
+  }
+}
