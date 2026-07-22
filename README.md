@@ -13,6 +13,12 @@ This repository currently contains parser-only tooling:
 
 No portal login, scraping, browser automation, credential storage, telemetry, or external AI processing is included.
 
+## Future AI/OCR support
+
+AI-assisted OCR may be added later for scanned PDFs, broken text extraction, table reconstruction, and parser fallback. The intended design is provider-neutral and opt-in: no AI processing happens by default, and any future remote provider must require explicit user configuration.
+
+The first named model example is Baidu's `baidu/Unlimited-OCR` on Hugging Face, but the project should not lock itself to one OCR model. See [AI/OCR Roadmap](docs/roadmap/ai-ocr.md).
+
 ## Usage
 
 ```bash
