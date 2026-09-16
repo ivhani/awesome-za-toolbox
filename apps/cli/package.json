@@ -22,12 +22,12 @@
     "url": "https://github.com/ivhani/awesome-za-toolbox/issues"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "za-toolbox": "./dist/index.js"
+    "za-toolbox": "dist/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "LICENSE"],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -37,8 +37,8 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "dist/index.d.ts",
+      "import": "dist/index.js"
     }
   },
   "scripts": {
