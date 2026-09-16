@@ -1,0 +1,21 @@
+Home Loan Statement as at 07 December 2024
+Account Number : 0-000-000-000-000
+Account Summary
+Balance Outstanding R71 899.98Dr
+Home Loan Transaction History from 15 September 2024 to 07 December 2024
+Transaction
+Date
+DescriptionDebits
+R
+Credits
+R
+Balance
+R
+20 Sep 2024Opening Balance 80 554.85Dr
+20 Sep 2024Rate Change80 554.85Dr
+23 Sep 2024Payment3 000.0077 554.85Dr
+26 Sep 2024Interest745.7778 300.62Dr
+26 Sep 2024Transfer - Credit6 469.6471 830.98Dr
+26 Sep 2024Monthly Service Fee69.0071 899.98Dr
+07 Dec 2024Closing Balance71 899.98Dr
+Total Vatable Transactions:R 69.00Dr

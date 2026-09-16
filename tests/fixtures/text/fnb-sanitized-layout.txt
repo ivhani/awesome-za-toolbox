@@ -6,4 +6,5 @@ Closing Balance R1,250.00
 Transactions
 Date Description Amount Balance Reference
 2026-01-05 Grocery Store -250.00 750.00 CARD123
+Unrecognized transaction detail carried from the PDF footer
 2026-01-10 Salary 500.00 1,250.00 EFT456

@@ -1,0 +1,19 @@
+Branch NumberAccount NumberDateDDA BC/48/BV/KY/KY/BF/B9/C6/AA/YFN
+054000000000002025/07/31FIRST BUSINESS ZERO ACCOUNT
+First Business Zero Account : 00000000000
+Statement Period : 30 June 2025 to 31 July 2025
+Statement Balances
+Opening Balance4,919.57 Cr
+Closing Balance8,415.07 Cr
+Transactions in RAND (ZAR)
+Date
+DescriptionAmountBalance
+Accrued
+Bank
+Charges
+05 JulScheduled Payment To Vendor Ref123451,500.003,419.57Cr
+26 JulMagtape Credit Rental Income5,000.00Cr8,419.57Cr
+31 Jul0.008,419.57Cr4.50
+31 Jul4.508,415.07Cr
+Closing Balance8,415.07Cr
+Turnover for Statement Period

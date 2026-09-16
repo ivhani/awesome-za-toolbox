@@ -1,0 +1,21 @@
+Computer Generated Copy Tax Invoice
+FNB Fusion Premier Account : 00000000000
+Statement Period : 20 March 2025 to 19 April 2025
+Statement Balances
+Opening Balance
+71,810.00 Cr
+Closing Balance
+62,780.00 Cr
+Transactions in RAND (ZAR)
+Date
+DescriptionAmount
+Balance
+Accrued
+Bank
+Charges
+22 MarTransfer To Savings10,000.0061,810.00Cr
+22 MarPayment From Example2,000.00Cr63,810.00Cr
+02 AprRtc Pmt To Utility1,000.0062,810.00Cr30.00
+19 Apr#Service Fees30.0062,780.00Cr
+Closing Balance62,780.00 Cr
+Turnover for Statement Period
