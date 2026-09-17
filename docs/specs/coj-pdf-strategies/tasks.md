@@ -1,0 +1,35 @@
+# COJ PDF Extraction Strategies Tasks
+
+- [x] Create isolated worktree and branch from latest `origin/main`.
+- [x] Record approved spec, plan, tasks, acceptance criteria, and analysis before implementation.
+- [x] Add layout-aware PDF extraction in `packages/pdf-utils` using only Node/npm runtime dependencies.
+- [x] Add standard strategy interface and per-strategy result envelope.
+- [x] Convert standard text and XFA parsing into independent peer strategies.
+- [x] Add layout-aware COJ tax-invoice strategy and parser coverage.
+- [x] Add deterministic consolidation and review-required disagreement behavior.
+- [x] Add tests for standard, XFA, and layout-aware strategies.
+- [x] Add tests for agreement, single-success, all-fail, and disagreement consolidation.
+- [x] Validate selected private January/March 2026 PDFs locally without committing/copying them.
+- [x] Run `pnpm typecheck`.
+- [x] Run `pnpm test`.
+- [x] Run `pnpm build`.
+- [x] Run `pnpm audit --prod`.
+- [x] Record verification evidence and limitations.
+- [x] Commit, push branch, and open pull request to `main`.
+- [x] Add semantic strategy validation and coded failure diagnostics.
+- [x] Add a sanitized split/corrupted VAT regression fixture.
+- [x] Resolve the repeated pdf.js standard-font warning if portable.
+- [x] Revalidate one or two private layout samples and all 20 approved account PDFs.
+- [x] Rerun typecheck, full tests, build, and production audit.
+- [x] Update and push the existing pull request.
+- [x] Keep failed-peer diagnostics out of top-level warnings for validated single-success results.
+- [x] Prove single-success remains review-free while metadata retains all failed peers.
+- [x] Rerun all core gates and the approved 20-document corpus.
+- [x] Update and push the existing pull request with the warning-policy fix.
+- [x] Parse known XFA summary payments, interest, and deposit-release credits.
+- [x] Prevent summary VAT from duplicating detailed XFA VAT.
+- [x] Reject unreconciled XFA results before strategy consolidation.
+- [x] Add focused synthetic XFA regressions for adjustments, VAT fallback/deduplication, and semantic rejection.
+- [x] Revalidate the original 20-document flattened corpus and the 47-document full-history corpus together.
+- [x] Rerun typecheck, full tests, build, and production audit.
+- [x] Commit and push the XFA accounting fix to the existing pull request.

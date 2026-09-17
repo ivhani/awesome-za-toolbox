@@ -12,6 +12,22 @@ export async function createSyntheticPdf(filePath: string, lines: string[]): Pro
     .map((line, index) => `BT /F1 12 Tf 50 ${750 - index * 16} Td (${escapePdfText(line)}) Tj ET`)
     .join("\n");
 
+  await writeSyntheticPdf(filePath, [content]);
+}
+
+export async function createSyntheticPositionedPdf(
+  filePath: string,
+  items: { text: string; x: number; y: number; size?: number }[],
+): Promise<void> {
+  const content = items
+    .map((item) => `BT /F1 ${item.size ?? 12} Tf ${item.x} ${item.y} Td (${escapePdfText(item.text)}) Tj ET`)
+    .join("\n");
+
+  await writeSyntheticPdf(filePath, [content]);
+}
+
+function writeSyntheticPdf(filePath: string, contentStreams: string[]): Promise<void> {
+  const content = contentStreams.join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -36,7 +52,7 @@ export async function createSyntheticPdf(filePath: string, lines: string[]): Pro
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
 
-  await writeFile(filePath, pdf, "latin1");
+  return writeFile(filePath, pdf, "latin1");
 }
 
 export async function createSyntheticXfaPdf(filePath: string, xfaXml: string, lines: string[] = adobeFormPlaceholderLines()): Promise<void> {
@@ -130,6 +146,45 @@ export function syntheticCojXfaDataset(options: { totalDue?: string } = {}): str
               <ItemDescription>Payment received</ItemDescription>
               <ItemAmount>500.00</ItemAmount>
             </CategoryLineItem>
+          </CategoryTable>
+        </CategoryType>
+      </Body>
+    </Bill>
+  </xfa:data>
+</xfa:datasets>`;
+}
+
+export function syntheticCojXfaSummaryAdjustmentsDataset(options: { detailedVat?: string; totalDue?: string } = {}): string {
+  const detailedVat = options.detailedVat ?? "15.00";
+  const totalDue = options.totalDue ?? "565.00";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/">
+  <xfa:data>
+    <Bill>
+      <BillHeader>
+        <PersonalDetails><Date>2026/02/28</Date><Period>2026/02</Period></PersonalDetails>
+        <InvoiceDetails><AccountNumber>999000222</AccountNumber></InvoiceDetails>
+      </BillHeader>
+      <Summary>
+        <BillSummaryDetails>
+          <TotalDue>${totalDue}</TotalDue>
+          <SummaryBreakdown><Description>Previous Account Balance</Description><Amount>1,000.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Less: Incoming Payment (Last Payment Made 2026/02/05)</Description><Amount>-500.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Sub Total</Description><Amount>500.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Interest on Arrears</Description><Amount>10.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Current Charges (Excl. VAT)</Description><Amount>90.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>VAT @ 15%</Description><Amount>15.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Deposit Released</Description><Amount>-50.00</Amount></SummaryBreakdown>
+        </BillSummaryDetails>
+      </Summary>
+      <Body>
+        <CurrentCharges><TotalDue>${totalDue}</TotalDue></CurrentCharges>
+        <CategoryType>
+          <CategoryName>Water</CategoryName>
+          <CategoryTable>
+            <CategoryLineItem><ItemDescription>Service charge</ItemDescription><ItemAmount>100.00</ItemAmount></CategoryLineItem>
+            <CategoryLineItem><ItemDescription>Service correction</ItemDescription><ItemAmount>-10.00</ItemAmount></CategoryLineItem>
+            <CategoryLineItem><ItemDescription>VAT: 15.00%</ItemDescription><ItemAmount>${detailedVat}</ItemAmount></CategoryLineItem>
           </CategoryTable>
         </CategoryType>
       </Body>

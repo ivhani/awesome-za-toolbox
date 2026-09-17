@@ -1,0 +1,22 @@
+TAX INVOICE
+EXAMPLE CUSTOMER
+Date2026/01/09
+Statement forJanuary 2026
+Account Number:558000000
+Previous Account Balance
+Current Charges (Excl. VAT)
+VAT @ 15%
+1,000.00
+700.00
+105.00
+Property RatesVAT 4760117194Sub - TotalTotal
+Amount
+Category of Property: Property Rates Residential
+R 700,000.00 X R 0.0095447 / 12 ( Billing Period 2026/01 )556.90
+VAT: 0 %55,295.55
+PIKITUP
+RefuseVAT 4790191292Sub - TotalTotal
+Amount
+Refuse Residential ( Billing Period 2026/01 )143.10
+Current Charges (Including VAT)805.00
+Where can a payment be made?
