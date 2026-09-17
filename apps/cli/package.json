@@ -1,6 +1,6 @@
 {
   "name": "za-toolbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI for local-first South African document conversion tools.",
   "license": "MIT",
   "keywords": [
@@ -27,7 +27,11 @@
   "bin": {
     "za-toolbox": "dist/index.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public",
     "provenance": true

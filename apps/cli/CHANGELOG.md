@@ -1,0 +1,13 @@
+# Changelog
+
+## [0.2.0](https://github.com/ivhani/awesome-za-toolbox/compare/za-toolbox-v0.1.0...za-toolbox-v0.2.0) (2026-09-17)
+
+
+### Features
+
+* add deterministic COJ XFA statement parsing ([ccedd7b](https://github.com/ivhani/awesome-za-toolbox/commit/ccedd7bcb639cba2cedd7632435b36e56bbc4582))
+
+
+### Bug Fixes
+
+* include bundled packages in releases ([#4](https://github.com/ivhani/awesome-za-toolbox/issues/4)) ([4a207ab](https://github.com/ivhani/awesome-za-toolbox/commit/4a207ab4ed582aeaddcb098d501a058db20638fe))
