@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";
-import { createSyntheticPdf, createTempDir } from "../helpers/synthetic-pdf.ts";
+import { createSyntheticPdf, createSyntheticXfaPdf, createTempDir, syntheticCojXfaDataset } from "../helpers/synthetic-pdf.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const cliEntry = path.join(repoRoot, "apps/cli/src/index.ts");
@@ -60,6 +60,26 @@ test("CLI writes eJoburg CSV output", async () => {
     "payment,2026-01-20,Payment received,-150,ZAR,EFT",
     "",
   ].join("\n"));
+});
+
+test("CLI writes eJoburg JSON output from a COJ XFA dynamic-form PDF", async () => {
+  const dir = await createTempDir("za-toolbox-cli-xfa-json-");
+  const input = path.join(dir, "xfa-invoice.pdf");
+  const output = path.join(dir, "xfa-invoice.json");
+  await createSyntheticXfaPdf(input, syntheticCojXfaDataset());
+
+  const result = runCli(["municipal", "ejoburg", "parse", input, "--format", "json", "--output", output]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(await readFile(output, "utf8")) as {
+    ok: boolean;
+    data: { municipality: string; accountNumber: string; charges: unknown[]; payments: unknown[] };
+  };
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.municipality, "City of Johannesburg");
+  assert.equal(parsed.data.accountNumber, "999000111");
+  assert.equal(parsed.data.charges.length, 3);
+  assert.equal(parsed.data.payments.length, 1);
 });
 
 test("CLI fails for missing input files", () => {
