@@ -86,12 +86,16 @@ npm trusted publishing is configured for:
 - GitHub repo: `ivhani/awesome-za-toolbox`
 - Workflow: `release-za-toolbox.yml`
 
-Do not republish an existing version. For releases:
+Feature branches must not edit package versions or create release tags. Use Conventional Commit pull-request titles so squash merges communicate release intent:
 
-1. Bump `apps/cli/package.json`
-2. Commit and push
-3. Tag with `za-toolbox-vX.Y.Z`
-4. Push the tag
+- `feat: ...` for a minor release
+- `fix: ...` for a patch release
+- `feat!: ...` or another `!` type for a breaking release
+- `chore: ...`, `docs: ...`, and `test: ...` for changes that should not release by themselves
+
+Release Please maintains a separate release pull request after releasable changes land on `main`. Merging that release pull request updates `apps/cli/package.json` and `apps/cli/CHANGELOG.md`, creates a `za-toolbox-vX.Y.Z` tag and GitHub release, verifies the repository, and publishes the exact tagged version to npm through trusted publishing.
+
+Do not manually bump or republish an existing version. Preserve the `release-za-toolbox.yml` workflow filename because npm trusted publishing is bound to it.
 
 ## Verification
 

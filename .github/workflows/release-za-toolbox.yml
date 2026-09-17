@@ -2,18 +2,42 @@ name: Release za-toolbox
 
 on:
   push:
-    tags:
-      - "za-toolbox-v*"
+    branches: [main]
 
-permissions:
-  contents: read
-  id-token: write
+concurrency:
+  group: release-za-toolbox-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release-created: ${{ steps.release.outputs['apps/cli--release_created'] }}
+      release-sha: ${{ steps.release.outputs['apps/cli--sha'] }}
+    steps:
+      - name: Create or update release
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release-created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.release-sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10.30.3

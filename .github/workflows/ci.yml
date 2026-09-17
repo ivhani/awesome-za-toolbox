@@ -6,6 +6,23 @@ on:
   pull_request:
 
 jobs:
+  pull-request-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Conventional Commit title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node --input-type=module <<'NODE'
+          const title = process.env.PR_TITLE ?? "";
+          const conventionalTitle = /^(feat|fix|chore|docs|test|refactor|perf|build|ci|revert)(\([a-z0-9._/-]+\))?!?: .+/;
+          if (!conventionalTitle.test(title)) {
+            console.error("Pull-request title must use Conventional Commit syntax, for example: feat: add a parser");
+            process.exit(1);
+          }
+          NODE
+
   test:
     runs-on: ubuntu-latest
     steps:
