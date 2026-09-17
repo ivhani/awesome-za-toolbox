@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { inflateRawSync, inflateSync, unzipSync } from "node:zlib";
 import pdfParse from "pdf-parse";
 import { ToolboxError, assertReadableFile } from "@awesome-za/core";
 
@@ -8,12 +9,7 @@ export interface ExtractedPdfText {
 }
 
 export async function extractPdfText(filePath: string): Promise<ExtractedPdfText> {
-  await assertReadableFile(filePath);
-
-  const buffer = await readFile(filePath);
-  if (!buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
-    throw new ToolboxError("INVALID_PDF", "Input file does not look like a PDF.");
-  }
+  const buffer = await readPdfBuffer(filePath);
 
   try {
     const parsed = await pdfParse(buffer);
@@ -31,6 +27,31 @@ export async function extractPdfText(filePath: string): Promise<ExtractedPdfText
   }
 
   throw new ToolboxError("PDF_TEXT_EXTRACTION_FAILED", "No extractable text was found in the PDF.");
+}
+
+export async function extractPdfXfaDataset(filePath: string): Promise<string> {
+  const buffer = await readPdfBuffer(filePath);
+
+  for (const stream of extractPdfStreams(buffer)) {
+    for (const candidate of decodePdfStreamCandidates(stream)) {
+      const xml = extractXfaDatasetXml(candidate);
+      if (xml) {
+        return xml;
+      }
+    }
+  }
+
+  throw new ToolboxError("PDF_XFA_DATASET_NOT_FOUND", "No embedded XFA dataset XML was found in the PDF.");
+}
+
+async function readPdfBuffer(filePath: string): Promise<Buffer> {
+  await assertReadableFile(filePath);
+
+  const buffer = await readFile(filePath);
+  if (!buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
+    throw new ToolboxError("INVALID_PDF", "Input file does not look like a PDF.");
+  }
+  return buffer;
 }
 
 function normalizePdfText(text: string): string {
@@ -51,6 +72,40 @@ function extractLiteralPdfStrings(buffer: Buffer): string {
     .map((match) => unescapePdfLiteral(match[1] ?? "").trim())
     .filter(Boolean)
     .join("\n");
+}
+
+function extractPdfStreams(buffer: Buffer): Buffer[] {
+  const raw = buffer.toString("latin1");
+  const matches = [...raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)];
+  return matches.map((match) => Buffer.from(match[1] ?? "", "latin1"));
+}
+
+function decodePdfStreamCandidates(stream: Buffer): string[] {
+  const decoded = [stream.toString("utf8")];
+
+  for (const decode of [inflateSync, unzipSync, inflateRawSync]) {
+    try {
+      decoded.push(decode(stream).toString("utf8"));
+    } catch {
+      // Try the next PDF stream decoding mode.
+    }
+  }
+
+  return decoded;
+}
+
+function extractXfaDatasetXml(text: string): string | undefined {
+  const startMatch = text.match(/<(?:(?:[A-Za-z_][\w.-]*):)?datasets\b/i);
+  if (startMatch?.index === undefined) {
+    return undefined;
+  }
+
+  const endMatch = text.slice(startMatch.index).match(/<\/(?:(?:[A-Za-z_][\w.-]*):)?datasets>/i);
+  if (!endMatch?.[0] || endMatch.index === undefined) {
+    return undefined;
+  }
+
+  return text.slice(startMatch.index, startMatch.index + endMatch.index + endMatch[0].length);
 }
 
 function unescapePdfLiteral(value: string): string {

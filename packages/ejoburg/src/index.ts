@@ -5,13 +5,14 @@ import {
   okResult,
   roundMoney,
   sourceFileName,
+  ToolboxError,
   unknownError,
   type ParseCheck,
   type ParseInput,
   type ParseResult,
   type ParseWarning,
 } from "@awesome-za/core";
-import { extractPdfText } from "@awesome-za/pdf-utils";
+import { extractPdfText, extractPdfXfaDataset } from "@awesome-za/pdf-utils";
 import type { MunicipalLineItem, MunicipalStatement, StatementPeriod } from "@awesome-za/schemas";
 
 const PARSER_NAME = "@awesome-za/ejoburg";
@@ -29,23 +30,40 @@ export async function parseEjoburgStatement(input: ParseInput): Promise<ParseRes
   });
 
   try {
-    const { text } = await extractPdfText(input.filePath);
-    const parsed = parseEjoburgStatementText(text);
-    const checks = buildChecks(parsed.statement);
-    const warnings = [...parsed.warnings, ...checksToWarnings(checks)];
-    const confidence = checks.some((check) => check.status === "failed") ? "medium" : "high";
+    try {
+      const { text } = await extractPdfText(input.filePath);
+      const parsed = parseEjoburgStatementText(text);
+      return okMunicipalResult(parsed, baseMetadata);
+    } catch (error) {
+      if (!shouldTryXfa(error)) {
+        throw error;
+      }
 
-    return okResult({
-      data: parsed.statement,
-      warnings,
-      metadata: { ...baseMetadata, confidence, checks },
-    });
+      const xml = await extractPdfXfaDataset(input.filePath);
+      const parsed = parseEjoburgStatementXfaDataset(xml);
+      return okMunicipalResult(parsed, baseMetadata);
+    }
   } catch (error) {
     return errorResult({
       metadata: baseMetadata,
       errors: [unknownError(error)],
     });
   }
+}
+
+function okMunicipalResult(
+  parsed: { statement: MunicipalStatement; warnings: ParseWarning[] },
+  baseMetadata: ReturnType<typeof createMetadata>,
+): ParseResult<MunicipalStatement> {
+  const checks = buildChecks(parsed.statement);
+  const warnings = [...parsed.warnings, ...checksToWarnings(checks)];
+  const confidence = checks.some((check) => check.status === "failed") ? "medium" : "high";
+
+  return okResult({
+    data: parsed.statement,
+    warnings,
+    metadata: { ...baseMetadata, confidence, checks },
+  });
 }
 
 export function parseEjoburgStatementText(text: string): { statement: MunicipalStatement; warnings: ParseWarning[] } {
@@ -185,6 +203,209 @@ function looksLikeCojTaxInvoice(lines: string[]): boolean {
 function looksLikeUnsupportedAdobeForm(lines: string[]): boolean {
   return lines.some((line) => /requires Adobe Reader 8 or higher/i.test(line))
     && lines.some((line) => /go\/pdf_forms_configure/i.test(line));
+}
+
+function shouldTryXfa(error: unknown): boolean {
+  if (error instanceof ToolboxError) {
+    return error.code === "PDF_TEXT_EXTRACTION_FAILED";
+  }
+  return error instanceof Error && /Adobe dynamic form/i.test(error.message);
+}
+
+export function parseEjoburgStatementXfaDataset(xml: string): { statement: MunicipalStatement; warnings: ParseWarning[] } {
+  const normalizedXml = normalizeXmlForXfa(xml);
+  const bill = firstXmlBlock(normalizedXml, "Bill");
+  if (!bill || !firstXmlBlock(bill, "BillHeader")) {
+    throw new ToolboxError("EJOBURG_XFA_BILL_NOT_FOUND", "No supported City of Johannesburg Bill dataset was found in the XFA XML.");
+  }
+
+  const warnings: ParseWarning[] = [];
+  const billingPeriod = parseXfaBillingPeriod(bill);
+  const statementDate = parseOptionalXfaDate(firstXmlText(bill, ["BillHeader", "PersonalDetails", "Date"]));
+  const lineItemDate = billingPeriod.from ?? statementDate ?? billingPeriod.to;
+  const summaryRows = xmlBlocks(bill, "SummaryBreakdown");
+  const summaryAmounts = new Map(summaryRows.map((row) => [
+    normalizeSummaryLabel(firstXmlText(row, ["Description"])),
+    parseOptionalMoney(firstXmlText(row, ["Amount"])),
+  ]).filter((entry): entry is [string, number] => Boolean(entry[0]) && entry[1] !== undefined));
+
+  const priorBalance = summaryAmounts.get("previous account balance")
+    ?? parseOptionalMoney(firstXmlText(bill, ["Summary", "BillSummaryDetails", "Arrears", "TotalOutstanding"]));
+  const totalDue = parseOptionalMoney(firstXmlText(bill, ["Summary", "BillSummaryDetails", "TotalDue"]))
+    ?? parseOptionalMoney(firstXmlText(bill, ["Body", "CurrentCharges", "TotalDue"]));
+
+  const lineItems = parseXfaLineItems(bill, lineItemDate, warnings);
+  const currentCharges = summaryAmounts.get("current charges (excl. vat)");
+  const vat = summaryAmounts.get("vat @ 15%");
+  if (currentCharges !== undefined && lineItems.charges.length === 0) {
+    lineItems.charges.push({
+      date: lineItemDate,
+      description: "Current Charges (Excl. VAT)",
+      amount: currentCharges,
+      currency: "ZAR",
+    });
+  }
+  if (vat !== undefined && !hasDescription(lineItems.charges, "VAT @ 15%")) {
+    lineItems.charges.push({
+      date: lineItemDate,
+      description: "VAT @ 15%",
+      amount: vat,
+      currency: "ZAR",
+    });
+  }
+
+  if (lineItems.charges.length === 0 && lineItems.payments.length === 0) {
+    throw new ToolboxError("EJOBURG_XFA_NO_LINE_ITEMS", "No supported City of Johannesburg XFA charges or payments were parsed.");
+  }
+
+  return {
+    statement: {
+      municipality: "City of Johannesburg",
+      accountNumber: firstXmlText(bill, ["BillHeader", "InvoiceDetails", "AccountNumber"]),
+      billingPeriod,
+      openingBalance: priorBalance,
+      closingBalance: totalDue,
+      charges: lineItems.charges,
+      payments: lineItems.payments,
+    },
+    warnings,
+  };
+}
+
+function parseXfaBillingPeriod(bill: string): StatementPeriod {
+  const period = firstXmlText(bill, ["BillHeader", "PersonalDetails", "Period"]);
+  if (period) {
+    try {
+      return parseMonthPeriod(period.replace("-", "/"));
+    } catch {
+      const explicit = period.match(/(\d{4}[/-]\d{2}[/-]\d{2}).*?(\d{4}[/-]\d{2}[/-]\d{2})/);
+      if (explicit?.[1] && explicit[2]) {
+        return { from: parseDate(explicit[1].replaceAll("/", "-")), to: parseDate(explicit[2].replaceAll("/", "-")) };
+      }
+    }
+  }
+
+  const statementDate = firstXmlText(bill, ["BillHeader", "PersonalDetails", "Date"]);
+  if (statementDate) {
+    return parseMonthPeriod(statementDate.replaceAll("-", "/"));
+  }
+
+  throw new ToolboxError("EJOBURG_XFA_PERIOD_MISSING", "Missing City of Johannesburg XFA billing period.");
+}
+
+function parseXfaLineItems(
+  bill: string,
+  fallbackDate: string,
+  warnings: ParseWarning[],
+): { charges: MunicipalLineItem[]; payments: MunicipalLineItem[] } {
+  const charges: MunicipalLineItem[] = [];
+  const payments: MunicipalLineItem[] = [];
+
+  for (const category of xmlBlocks(bill, "CategoryType")) {
+    const categoryName = collapseWhitespace(firstXmlText(category, ["CategoryName"]) || "COJ");
+    for (const item of xmlBlocks(category, "CategoryLineItem")) {
+      const amountText = firstXmlText(item, ["ItemAmount"]) || firstXmlText(item, ["ItemSubTotal"]);
+      const amount = parseOptionalMoney(amountText);
+      if (amount === undefined || amount === 0) {
+        continue;
+      }
+
+      const rawDescription = collapseWhitespace(firstXmlText(item, ["ItemDescription"]) || categoryName);
+      const date = parseOptionalXfaDate(firstXmlText(item, ["ItemDate"])) ?? parseXfaLineItemDate(rawDescription, fallbackDate);
+      const lineItem = {
+        date,
+        description: `${categoryName}: ${rawDescription}`,
+        amount,
+        currency: "ZAR" as const,
+      };
+
+      if (isPaymentDescription(categoryName, rawDescription) || amount < 0) {
+        payments.push({ ...lineItem, amount: amount > 0 ? -amount : amount });
+      } else {
+        charges.push(lineItem);
+      }
+    }
+  }
+
+  if (charges.length === 0 && payments.length === 0 && xmlBlocks(bill, "CategoryLineItem").length > 0) {
+    warnings.push({
+      code: "EJOBURG_XFA_LINE_ITEMS_SKIPPED",
+      message: "City of Johannesburg XFA line items were present but no monetary charge or payment rows were parsed.",
+    });
+  }
+
+  return { charges, payments };
+}
+
+function parseXfaLineItemDate(description: string, fallbackDate: string): string {
+  const readingPeriod = description.match(/Reading period\s+(\d{4}[/-]\d{2}[/-]\d{2})\s*(?:-|to)\s*(\d{4}[/-]\d{2}[/-]\d{2})/i);
+  return readingPeriod?.[1] ? parseDate(readingPeriod[1].replaceAll("/", "-")) : fallbackDate;
+}
+
+function isPaymentDescription(categoryName: string, description: string): boolean {
+  return /\b(payment|receipt|credit)\b/i.test(`${categoryName} ${description}`);
+}
+
+function hasDescription(items: MunicipalLineItem[], description: string): boolean {
+  return items.some((item) => item.description.toLowerCase() === description.toLowerCase());
+}
+
+function normalizeSummaryLabel(value: string | undefined): string {
+  return collapseWhitespace(value ?? "").toLowerCase();
+}
+
+function parseOptionalXfaDate(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (/^\d{4}[/-]\d{2}[/-]\d{2}$/.test(trimmed)) {
+    return parseDate(trimmed.replaceAll("/", "-"));
+  }
+  if (/^\d{4}[/-]\d{2}$/.test(trimmed) || /^[A-Za-z]+\s+\d{4}$/.test(trimmed)) {
+    return parseMonthPeriod(trimmed.replace("-", "/")).from;
+  }
+  return undefined;
+}
+
+function normalizeXmlForXfa(xml: string): string {
+  return xml
+    .replace(/(<\/?)([A-Za-z_][\w.-]*):/g, "$1")
+    .replace(/>\s+</g, "><");
+}
+
+function firstXmlText(xml: string, path: string[]): string | undefined {
+  let current = xml;
+  for (const tagName of path) {
+    const block = firstXmlBlock(current, tagName);
+    if (block === undefined) {
+      return undefined;
+    }
+    current = block;
+  }
+  return decodeXmlEntities(current.replace(/<[^>]+>/g, "").trim()) || undefined;
+}
+
+function firstXmlBlock(xml: string, tagName: string): string | undefined {
+  return xmlBlocks(xml, tagName)[0];
+}
+
+function xmlBlocks(xml: string, tagName: string): string[] {
+  const pattern = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+  return [...xml.matchAll(pattern)].map((match) => match[1] ?? "");
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'");
+}
+
+function collapseWhitespace(value: string): string {
+  return value.split(/\s+/).filter(Boolean).join(" ");
 }
 
 function parseCojAccountNumber(lines: string[]): string | undefined {
