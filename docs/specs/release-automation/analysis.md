@@ -37,3 +37,9 @@
 - The publish job is gated on the path-specific `apps/cli` release output and checks out the release SHA emitted by Release Please.
 - GitHub Actions retains read-only default permissions. The repository setting allowing Actions-created pull requests is enabled for the Release Please workflow.
 - Squash commits now use pull-request titles so the enforced Conventional Commit title reaches `main` deterministically.
+
+## Post-Merge Scope Finding
+
+The first mainline run after merging the XFA parser completed successfully but proposed no release. Release Please split commits by the configured `apps/cli` path and assigned zero commits to that component because the public CLI bundles code from private workspace packages outside its directory.
+
+The correction changes the release component path to the repository root, where the private root `package.json` acts as release-train metadata. Release Please updates `apps/cli/package.json` through an explicit JSON updater and writes the public changelog under `apps/cli`. The publish job remains scoped to `apps/cli` and retains its existing release-created gate, exact release SHA checkout, and npm OIDC permissions.

@@ -16,8 +16,8 @@ jobs:
       issues: write
       pull-requests: write
     outputs:
-      release-created: ${{ steps.release.outputs['apps/cli--release_created'] }}
-      release-sha: ${{ steps.release.outputs['apps/cli--sha'] }}
+      release-created: ${{ steps.release.outputs.release_created }}
+      release-sha: ${{ steps.release.outputs.sha }}
     steps:
       - name: Create or update release
         id: release

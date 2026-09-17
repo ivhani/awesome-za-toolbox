@@ -63,7 +63,7 @@ The first public package is `za-toolbox`. Internal `@awesome-za/*` workspace pac
 
 Publishing is automated with Release Please and GitHub trusted publishing. Feature pull requests use Conventional Commit titles such as `feat: add a parser` or `fix: handle an empty statement`; feature branches do not edit package versions.
 
-After releasable changes land on `main`, Release Please opens or updates a dedicated release pull request. Merging that pull request bumps the public package version, updates the changelog, creates the `za-toolbox-vX.Y.Z` tag and GitHub release, runs the full verification suite, and publishes the package to npm.
+After releasable changes anywhere in the CLI or its bundled workspace packages land on `main`, Release Please opens or updates a dedicated release pull request. Merging that pull request bumps the public package version, updates the changelog, creates the `za-toolbox-vX.Y.Z` tag and GitHub release, runs the full verification suite, and publishes the package to npm.
 
 ## Privacy rules
 
