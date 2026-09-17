@@ -637,6 +637,16 @@ function appendXfaSummaryAdjustments(
       continue;
     }
 
+    if (/^credit balance transfer\b/i.test(normalized)) {
+      appendXfaAdjustment(lineItems.payments, {
+        date: fallbackDate,
+        description: "Credit Balance Transfer",
+        amount: entry.amount,
+        currency: "ZAR",
+      }, /\bcredit balance transfer\b/i);
+      continue;
+    }
+
     if (/^deposit released\b/i.test(normalized)) {
       appendXfaAdjustment(lineItems.payments, {
         date: fallbackDate,

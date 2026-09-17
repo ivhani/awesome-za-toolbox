@@ -206,7 +206,9 @@ function extractLiteralPdfStrings(buffer: Buffer): string {
 
 function extractPdfStreams(buffer: Buffer): Buffer[] {
   const raw = buffer.toString("latin1");
-  const matches = [...raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)];
+  // Keep a trailing CR in the stream payload. Compressed data may legitimately
+  // end in 0x0D even when the PDF uses a lone LF before `endstream`.
+  const matches = [...raw.matchAll(/stream\r?\n([\s\S]*?)\nendstream/g)];
   return matches.map((match) => Buffer.from(match[1] ?? "", "latin1"));
 }
 

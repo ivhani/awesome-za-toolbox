@@ -114,6 +114,16 @@ test("extracts an embedded COJ XFA dataset from a compressed PDF stream", async 
   assert.match(xml, /<AccountNumber>999000111<\/AccountNumber>/);
 });
 
+test("extracts compressed XFA when the final payload byte is a carriage return", async () => {
+  const dir = await createTempDir("za-toolbox-ejoburg-xfa-cr-byte-");
+  const filePath = path.join(dir, "ejoburg-xfa-cr-byte.pdf");
+  await createSyntheticXfaPdf(filePath, syntheticCojXfaDataset(), undefined, { compressedFinalByte: 0x0d });
+
+  const xml = await extractPdfXfaDataset(filePath);
+
+  assert.match(xml, /<AccountNumber>999000111<\/AccountNumber>/);
+});
+
 test("parses a synthetic COJ XFA dynamic-form statement PDF", async () => {
   const dir = await createTempDir("za-toolbox-ejoburg-xfa-");
   const filePath = path.join(dir, "ejoburg-xfa.pdf");
@@ -160,6 +170,21 @@ test("parses XFA summary adjustments without duplicating detailed VAT", async ()
   assert.deepEqual(result.data?.payments.map((item) => item.amount), [-500, -50]);
   assert.equal(result.data?.charges.filter((item) => /VAT/i.test(item.description)).length, 1);
   assert.equal(result.data?.closingBalance, 565);
+});
+
+test("preserves signed XFA credit balance transfers as balance movements", async () => {
+  for (const [creditBalanceTransfer, totalDue] of [["2,206.66", "2,771.66"], ["-2,206.66", "-1,641.66"]]) {
+    const dir = await createTempDir("za-toolbox-ejoburg-xfa-credit-transfer-");
+    const filePath = path.join(dir, "ejoburg-xfa-credit-transfer.pdf");
+    await createSyntheticXfaPdf(filePath, syntheticCojXfaSummaryAdjustmentsDataset({ creditBalanceTransfer, totalDue }));
+
+    const result = await parseEjoburgStatement({ filePath });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.metadata.checks[0]?.status, "passed");
+    assert.deepEqual(result.data?.payments.map((item) => item.amount), [-500, Number(creditBalanceTransfer.replaceAll(",", "")), -50]);
+    assert.equal(result.data?.charges.some((item) => /credit balance transfer/i.test(item.description)), false);
+  }
 });
 
 test("rejects contradictory detailed and summary VAT in XFA statements", async () => {

@@ -55,11 +55,16 @@ function writeSyntheticPdf(filePath: string, contentStreams: string[]): Promise<
   return writeFile(filePath, pdf, "latin1");
 }
 
-export async function createSyntheticXfaPdf(filePath: string, xfaXml: string, lines: string[] = adobeFormPlaceholderLines()): Promise<void> {
+export async function createSyntheticXfaPdf(
+  filePath: string,
+  xfaXml: string,
+  lines: string[] = adobeFormPlaceholderLines(),
+  options: { compressedFinalByte?: number } = {},
+): Promise<void> {
   const content = lines
     .map((line, index) => `BT /F1 12 Tf 50 ${750 - index * 16} Td (${escapePdfText(line)}) Tj ET`)
     .join("\n");
-  const xfaStream = deflateSync(Buffer.from(xfaXml, "utf8"));
+  const xfaStream = deflateXfaStream(xfaXml, options.compressedFinalByte);
 
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
@@ -154,9 +159,16 @@ export function syntheticCojXfaDataset(options: { totalDue?: string } = {}): str
 </xfa:datasets>`;
 }
 
-export function syntheticCojXfaSummaryAdjustmentsDataset(options: { detailedVat?: string; totalDue?: string } = {}): string {
+export function syntheticCojXfaSummaryAdjustmentsDataset(options: {
+  creditBalanceTransfer?: string;
+  detailedVat?: string;
+  totalDue?: string;
+} = {}): string {
   const detailedVat = options.detailedVat ?? "15.00";
   const totalDue = options.totalDue ?? "565.00";
+  const creditBalanceTransfer = options.creditBalanceTransfer === undefined
+    ? ""
+    : `<SummaryBreakdown><Description>Credit Balance Transfer</Description><Amount>${options.creditBalanceTransfer}</Amount></SummaryBreakdown>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/">
   <xfa:data>
@@ -172,6 +184,7 @@ export function syntheticCojXfaSummaryAdjustmentsDataset(options: { detailedVat?
           <SummaryBreakdown><Description>Less: Incoming Payment (Last Payment Made 2026/02/05)</Description><Amount>-500.00</Amount></SummaryBreakdown>
           <SummaryBreakdown><Description>Sub Total</Description><Amount>500.00</Amount></SummaryBreakdown>
           <SummaryBreakdown><Description>Interest on Arrears</Description><Amount>10.00</Amount></SummaryBreakdown>
+          ${creditBalanceTransfer}
           <SummaryBreakdown><Description>Current Charges (Excl. VAT)</Description><Amount>90.00</Amount></SummaryBreakdown>
           <SummaryBreakdown><Description>VAT @ 15%</Description><Amount>15.00</Amount></SummaryBreakdown>
           <SummaryBreakdown><Description>Deposit Released</Description><Amount>-50.00</Amount></SummaryBreakdown>
@@ -191,6 +204,21 @@ export function syntheticCojXfaSummaryAdjustmentsDataset(options: { detailedVat?
     </Bill>
   </xfa:data>
 </xfa:datasets>`;
+}
+
+function deflateXfaStream(xfaXml: string, finalByte?: number): Buffer {
+  if (finalByte === undefined) {
+    return deflateSync(Buffer.from(xfaXml, "utf8"));
+  }
+
+  for (let paddingLength = 0; paddingLength < 65_521; paddingLength += 1) {
+    const candidate = deflateSync(Buffer.from(`${xfaXml}${" ".repeat(paddingLength)}`, "utf8"));
+    if (candidate.at(-1) === finalByte) {
+      return candidate;
+    }
+  }
+
+  throw new Error(`Could not produce a synthetic XFA stream ending in byte ${finalByte}.`);
 }
 
 function adobeFormPlaceholderLines(): string[] {
