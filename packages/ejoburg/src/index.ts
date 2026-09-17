@@ -806,6 +806,12 @@ function parseCojChargeLines(lines: string[], warnings: ParseWarning[], fallback
       continue;
     }
 
+    const standaloneCategory = line.match(/^(Property Rates|Electricity|Water(?:\s*(?:&|and)\s*Sanitation)?|Sewerage|Refuse)$/i);
+    if (standaloneCategory?.[1]) {
+      category = standaloneCategory[1];
+      continue;
+    }
+
     if (!category || shouldSkipCojChargeLine(line)) {
       continue;
     }

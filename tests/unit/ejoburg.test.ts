@@ -192,6 +192,11 @@ test("extracts and parses positioned COJ tax-invoice text with the layout-aware 
   assert.equal(layoutResult?.statement?.openingBalance, -1303.11);
   assert.equal(layoutResult?.statement?.closingBalance, -499.22);
   assert.equal(layoutResult?.statement?.charges.length, 3);
+  assert.deepEqual(layoutResult?.statement?.charges.map((charge) => charge.description), [
+    "Property Rates: Basic charge (Billing Period 2026/06)",
+    "Property Rates: VAT 15%",
+    "PIKITUP: Refuse charge",
+  ]);
 
   const result = await parseEjoburgStatement({ filePath });
   assert.equal(result.ok, true);
@@ -372,14 +377,15 @@ function syntheticCojLayoutItems(): { text: string; x: number; y: number; size?:
     row(210, 670, "773.89"),
     row(390, 670, "30.00"),
     row(480, 670, "-499.22"),
-    row(50, 638, "Water and Sanitation VAT 1234567890 Sub - Total Total"),
-    row(50, 622, "Basic charge (Billing Period 2026/06)"),
-    row(430, 622, "200.00"),
-    row(50, 606, "VAT: 15%"),
-    row(430, 606, "30.00"),
-    row(50, 574, "PIKITUP"),
-    row(50, 558, "Refuse charge"),
-    row(430, 558, "573.89"),
+    row(50, 638, "VAT 4760117194 Sub - Total Total Amount"),
+    row(50, 622, "Property Rates"),
+    row(50, 606, "Basic charge (Billing Period 2026/06)"),
+    row(430, 606, "200.00"),
+    row(50, 590, "VAT: 15%"),
+    row(430, 590, "30.00"),
+    row(50, 558, "PIKITUP"),
+    row(50, 542, "Refuse charge"),
+    row(430, 542, "573.89"),
   ];
 }
 
