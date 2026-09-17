@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/ivhani/awesome-za-toolbox/compare/za-toolbox-v0.2.0...za-toolbox-v0.3.0) (2026-09-17)
+
+
+### Features
+
+* add peer PDF extraction strategies for COJ ([#6](https://github.com/ivhani/awesome-za-toolbox/issues/6)) ([306dd72](https://github.com/ivhani/awesome-za-toolbox/commit/306dd72ecdee4a14db2ca6b965671c65d828455c))
+
 ## [0.2.0](https://github.com/ivhani/awesome-za-toolbox/compare/za-toolbox-v0.1.0...za-toolbox-v0.2.0) (2026-09-17)
 
 
