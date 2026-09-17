@@ -12,11 +12,47 @@ import {
   type ParseResult,
   type ParseWarning,
 } from "@awesome-za/core";
-import { extractPdfText, extractPdfXfaDataset } from "@awesome-za/pdf-utils";
+import { extractPdfLayoutText, extractPdfText, extractPdfXfaDataset } from "@awesome-za/pdf-utils";
 import type { MunicipalLineItem, MunicipalStatement, StatementPeriod } from "@awesome-za/schemas";
 
 const PARSER_NAME = "@awesome-za/ejoburg";
 const PARSER_VERSION = "0.1.0";
+const STRATEGY_ORDER = ["standard-text", "xfa-dataset", "layout-aware"] as const;
+
+export type EjoburgStrategyName = typeof STRATEGY_ORDER[number];
+
+export interface EjoburgStrategyResult {
+  strategy: EjoburgStrategyName;
+  ok: boolean;
+  statement?: MunicipalStatement;
+  warnings: ParseWarning[];
+  errors: { code: string; message: string }[];
+  provenance: {
+    extraction: "pdf-text" | "xfa-dataset" | "layout-text";
+    pages?: number;
+    itemCount?: number;
+  };
+}
+
+interface EjoburgStrategyDiagnostic {
+  strategy: EjoburgStrategyName;
+  ok: boolean;
+  warningCodes: string[];
+  errors: { code: string; message: string }[];
+  provenance: EjoburgStrategyResult["provenance"];
+}
+
+interface ConsolidationMetadata {
+  status: "agreed" | "single-success" | "all-failed" | "review-required";
+  selectedStrategy?: EjoburgStrategyName;
+  reviewRequired: boolean;
+  successfulStrategies: EjoburgStrategyName[];
+}
+
+type EjoburgParseMetadata = ReturnType<typeof createMetadata> & {
+  strategies: EjoburgStrategyDiagnostic[];
+  consolidation: ConsolidationMetadata;
+};
 
 export async function parse(input: ParseInput): Promise<ParseResult<MunicipalStatement>> {
   return parseEjoburgStatement(input);
@@ -29,26 +65,106 @@ export async function parseEjoburgStatement(input: ParseInput): Promise<ParseRes
     sourceFileName: sourceFileName(input.filePath),
   });
 
-  try {
-    try {
-      const { text } = await extractPdfText(input.filePath);
-      const parsed = parseEjoburgStatementText(text);
-      return okMunicipalResult(parsed, baseMetadata);
-    } catch (error) {
-      if (!shouldTryXfa(error)) {
-        throw error;
-      }
+  const strategyResults = await runEjoburgParseStrategies(input);
+  return consolidateEjoburgStrategyResults(strategyResults, baseMetadata);
+}
 
-      const xml = await extractPdfXfaDataset(input.filePath);
-      const parsed = parseEjoburgStatementXfaDataset(xml);
-      return okMunicipalResult(parsed, baseMetadata);
-    }
-  } catch (error) {
+export async function runEjoburgParseStrategies(input: ParseInput): Promise<EjoburgStrategyResult[]> {
+  const results = await Promise.all([
+    runStandardTextStrategy(input),
+    runXfaDatasetStrategy(input),
+    runLayoutAwareStrategy(input),
+  ]);
+
+  return [...results].sort((left, right) => STRATEGY_ORDER.indexOf(left.strategy) - STRATEGY_ORDER.indexOf(right.strategy));
+}
+
+export function consolidateEjoburgStrategyResults(
+  strategyResults: EjoburgStrategyResult[],
+  baseMetadata: ReturnType<typeof createMetadata>,
+): ParseResult<MunicipalStatement> {
+  const successful = strategyResults.filter((result): result is EjoburgStrategyResult & { statement: MunicipalStatement } => result.ok && result.statement !== undefined);
+  const metadataBase = {
+    ...baseMetadata,
+    strategies: strategyResults.map(toStrategyDiagnostic),
+  };
+
+  if (successful.length === 0) {
+    const metadata: EjoburgParseMetadata = {
+      ...metadataBase,
+      confidence: "low",
+      checks: [],
+      consolidation: {
+        status: "all-failed",
+        reviewRequired: true,
+        successfulStrategies: [],
+      },
+    };
+
     return errorResult({
-      metadata: baseMetadata,
-      errors: [unknownError(error)],
+      metadata,
+      errors: [{
+        code: "EJOBURG_ALL_STRATEGIES_FAILED",
+        message: "No eJoburg PDF extraction strategy produced a supported municipal statement.",
+      }],
     });
   }
+
+  const selected = successful.sort((left, right) => STRATEGY_ORDER.indexOf(left.strategy) - STRATEGY_ORDER.indexOf(right.strategy))[0];
+  if (!selected) {
+    throw new Error("Strategy consolidation invariant failed.");
+  }
+
+  if (successful.some((result) => !statementsMateriallyAgree(selected.statement, result.statement))) {
+    const metadata: EjoburgParseMetadata = {
+      ...metadataBase,
+      confidence: "low",
+      checks: [],
+      consolidation: {
+        status: "review-required",
+        reviewRequired: true,
+        successfulStrategies: successful.map((result) => result.strategy),
+      },
+    };
+
+    return errorResult({
+      metadata,
+      errors: [{
+        code: "EJOBURG_STRATEGY_DISAGREEMENT",
+        message: "Successful eJoburg extraction strategies produced materially different statements; manual review is required.",
+      }],
+    });
+  }
+
+  const parsed = {
+    statement: selected.statement,
+    warnings: [
+      ...selected.warnings,
+      ...strategyResults.filter((result) => !result.ok).map((result) => ({
+        code: "EJOBURG_STRATEGY_FAILED",
+        message: `${result.strategy} did not produce a statement.`,
+      } satisfies ParseWarning)),
+    ],
+  };
+  const checks = buildChecks(parsed.statement);
+  const warnings = [...parsed.warnings, ...checksToWarnings(checks)];
+  const metadata: EjoburgParseMetadata = {
+    ...metadataBase,
+    confidence: checks.some((check) => check.status === "failed") ? "medium" : "high",
+    checks,
+    consolidation: {
+      status: successful.length === 1 ? "single-success" : "agreed",
+      selectedStrategy: selected.strategy,
+      reviewRequired: false,
+      successfulStrategies: successful.map((result) => result.strategy),
+    },
+  };
+
+  return okResult({
+    data: parsed.statement,
+    warnings,
+    metadata,
+  });
 }
 
 function okMunicipalResult(
@@ -64,6 +180,85 @@ function okMunicipalResult(
     warnings,
     metadata: { ...baseMetadata, confidence, checks },
   });
+}
+
+async function runStandardTextStrategy(input: ParseInput): Promise<EjoburgStrategyResult> {
+  try {
+    const { text, pages } = await extractPdfText(input.filePath);
+    const parsed = parseEjoburgStatementText(text);
+    return {
+      strategy: "standard-text",
+      ok: true,
+      statement: parsed.statement,
+      warnings: parsed.warnings,
+      errors: [],
+      provenance: { extraction: "pdf-text", pages },
+    };
+  } catch (error) {
+    return failedStrategy("standard-text", { extraction: "pdf-text" }, error);
+  }
+}
+
+async function runXfaDatasetStrategy(input: ParseInput): Promise<EjoburgStrategyResult> {
+  try {
+    const xml = await extractPdfXfaDataset(input.filePath);
+    const parsed = parseEjoburgStatementXfaDataset(xml);
+    return {
+      strategy: "xfa-dataset",
+      ok: true,
+      statement: parsed.statement,
+      warnings: parsed.warnings,
+      errors: [],
+      provenance: { extraction: "xfa-dataset" },
+    };
+  } catch (error) {
+    return failedStrategy("xfa-dataset", { extraction: "xfa-dataset" }, error);
+  }
+}
+
+async function runLayoutAwareStrategy(input: ParseInput): Promise<EjoburgStrategyResult> {
+  try {
+    const layout = await extractPdfLayoutText(input.filePath);
+    const parsed = parseEjoburgStatementLayoutText(layout.text);
+    return {
+      strategy: "layout-aware",
+      ok: true,
+      statement: parsed.statement,
+      warnings: parsed.warnings,
+      errors: [],
+      provenance: {
+        extraction: "layout-text",
+        pages: layout.pages,
+        itemCount: layout.items.length,
+      },
+    };
+  } catch (error) {
+    return failedStrategy("layout-aware", { extraction: "layout-text" }, error);
+  }
+}
+
+function failedStrategy(
+  strategy: EjoburgStrategyName,
+  provenance: EjoburgStrategyResult["provenance"],
+  error: unknown,
+): EjoburgStrategyResult {
+  return {
+    strategy,
+    ok: false,
+    warnings: [],
+    errors: [unknownError(error)],
+    provenance,
+  };
+}
+
+function toStrategyDiagnostic(result: EjoburgStrategyResult): EjoburgStrategyDiagnostic {
+  return {
+    strategy: result.strategy,
+    ok: result.ok,
+    warningCodes: [...new Set(result.warnings.map((warning) => warning.code))],
+    errors: result.errors,
+    provenance: result.provenance,
+  };
 }
 
 export function parseEjoburgStatementText(text: string): { statement: MunicipalStatement; warnings: ParseWarning[] } {
@@ -98,11 +293,53 @@ export function parseEjoburgStatementText(text: string): { statement: MunicipalS
   };
 }
 
+export function parseEjoburgStatementLayoutText(text: string): { statement: MunicipalStatement; warnings: ParseWarning[] } {
+  const lines = normalizeLayoutLines(text);
+  if (!looksLikeCojTaxInvoice(lines)) {
+    throw new ToolboxError("EJOBURG_LAYOUT_UNSUPPORTED", "Positioned text did not match a supported City of Johannesburg tax-invoice layout.");
+  }
+
+  return parseCojTaxInvoiceText(lines);
+}
+
+function normalizeLayoutLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .flatMap((line) => splitKnownLayoutLabels(line))
+    .map(normalizeKnownLayoutLine);
+}
+
+function splitKnownLayoutLabels(line: string): string[] {
+  const moneyMatches = [...line.matchAll(/-?[\d,\s]*\d+\.\d{2}/g)]
+    .map((match) => match[0]?.trim())
+    .filter((value): value is string => Boolean(value));
+  if (moneyMatches.length > 1 && line.replace(/[-\d,\s.]/g, "") === "") {
+    return moneyMatches;
+  }
+
+  return line
+    .replace(/\b(TAX INVOICE)\s+(Statement for\b)/i, "$1\n$2")
+    .replace(/\b(Previous Account Balance)\s+(Current Charges \(Excl\. VAT\))\s+(VAT @ 15%)\s+(Total Due)\b/i, "$1\n$2\n$3\n$4")
+    .split("\n")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function normalizeKnownLayoutLine(line: string): string {
+  return line
+    .replace(/^Account Number\s+(.+)$/i, "Account Number: $1")
+    .replace(/^Acc\. No\.\s+(.+)$/i, "Acc. No.: $1")
+    .replace(/^Total Due\s+(.+)$/i, "Total Due $1");
+}
+
 function parseCojTaxInvoiceText(lines: string[]): { statement: MunicipalStatement; warnings: ParseWarning[] } {
   const warnings: ParseWarning[] = [];
   const summaryAmounts = parseSummaryAmounts(lines);
   const billingPeriod = parseCojBillingPeriod(lines);
   const charges = parseCojChargeLines(lines, warnings, billingPeriod.from);
+  const payments = parseCojPaymentLines(lines, billingPeriod.from);
 
   if (charges.length === 0) {
     throw new Error("No City of Johannesburg tax-invoice charges were parsed.");
@@ -117,9 +354,9 @@ function parseCojTaxInvoiceText(lines: string[]): { statement: MunicipalStatemen
       accountNumber: parseCojAccountNumber(lines),
       billingPeriod,
       openingBalance: summaryAmounts.get("previous account balance"),
-      closingBalance: findLabeledMoney(lines, [/^Total Due\b/i, /^TOTAL AMOUNT OUTSTANDING\b/i]),
+      closingBalance: summaryAmounts.get("total due") ?? findLabeledMoney(lines, [/^Total Due\b/i, /^TOTAL AMOUNT OUTSTANDING\b/i]),
       charges,
-      payments: [],
+      payments,
     },
     warnings: [
       ...warnings,
@@ -195,9 +432,9 @@ function parseLineItem(line: string): MunicipalLineItem | undefined {
 }
 
 function looksLikeCojTaxInvoice(lines: string[]): boolean {
-  return lines.some((line) => /^TAX INVOICE$/i.test(line))
+  return lines.some((line) => /\bTAX INVOICE\b/i.test(line))
     && lines.some((line) => /^Account Number:/i.test(line))
-    && lines.some((line) => /^Statement for/i.test(line));
+    && lines.some((line) => /Statement for/i.test(line));
 }
 
 function looksLikeUnsupportedAdobeForm(lines: string[]): boolean {
@@ -414,12 +651,29 @@ function parseCojAccountNumber(lines: string[]): string | undefined {
 
 function parseCojBillingPeriod(lines: string[]): StatementPeriod {
   const explicitPeriod = optionalMatch(lines, /\(\s*Billing Period\s+(\d{4}\/\d{2})\s*\)/i);
-  const statementMonth = optionalMatch(lines, /^Statement for\s*(.+)$/i);
+  const statementMonth = optionalMatch(lines, /Statement for\s*(.+)$/i);
   return parseMonthPeriod(explicitPeriod ?? statementMonth ?? requiredMatch(lines, /^Date\s*(\d{4}\/\d{2}\/\d{2})$/i, "Missing City of Johannesburg statement period."));
 }
 
 function parseSummaryAmounts(lines: string[]): Map<string, number> {
   const result = new Map<string, number>();
+  for (const line of lines) {
+    for (const [label, pattern] of [
+      ["previous account balance", /^Previous Account Balance\b/i],
+      ["current charges (excl. vat)", /^Current Charges \(Excl\. VAT\)\b/i],
+      ["vat @ 15%", /^VAT @ 15%\b/i],
+      ["total due", /\bTotal Due\b/i],
+    ] as const) {
+      if (!pattern.test(line)) {
+        continue;
+      }
+      const amount = parseMoneyFromLine(line.replace(pattern, ""));
+      if (amount !== undefined) {
+        result.set(label, amount);
+      }
+    }
+  }
+
   const startIndex = lines.findIndex((line) => /^Previous Account Balance$/i.test(line));
   if (startIndex < 0) {
     return result;
@@ -454,7 +708,7 @@ function parseCojChargeLines(lines: string[], warnings: ParseWarning[], fallback
   for (const rawLine of lines) {
     const line = rawLine.replace(/\s+/g, " ").trim();
 
-    const heading = line.match(/^(.+?)VAT\s+\d{10}Sub\s*-\s*TotalTotal$/i);
+    const heading = line.match(/^(.+?)VAT\s+\d{10}\s*Sub\s*-\s*Total\s*Total$/i);
     if (heading?.[1]) {
       category = heading[1].trim();
       continue;
@@ -462,6 +716,11 @@ function parseCojChargeLines(lines: string[], warnings: ParseWarning[], fallback
 
     if (/^PIKITUP$/i.test(line)) {
       category = "PIKITUP";
+      continue;
+    }
+
+    if (/^VAT\s+\d{10}\s*Sub\s*-\s*Total\s*Total(?:\s*Amount)?$/i.test(line)) {
+      category ??= "COJ Charges";
       continue;
     }
 
@@ -483,6 +742,31 @@ function parseCojChargeLines(lines: string[], warnings: ParseWarning[], fallback
   }
 
   return charges;
+}
+
+function parseCojPaymentLines(lines: string[], fallbackDate: string): MunicipalLineItem[] {
+  return lines.flatMap((line) => {
+    if (!/^Less:\s*Incoming Payment\b/i.test(line)) {
+      return [];
+    }
+
+    const amount = parseMoneyFromLine(line);
+    if (amount === undefined || amount === 0) {
+      return [];
+    }
+
+    const dateMatch = line.match(/Last Payment Made\s+(\d{4}[/-]\d{2}[/-]\d{2}|\d{2}\/\d{2}\/\d{4})/i);
+    return [{
+      date: dateMatch?.[1] ? parseCojInlineDate(dateMatch[1]) : fallbackDate,
+      description: "Incoming Payment",
+      amount: amount > 0 ? -amount : amount,
+      currency: "ZAR" as const,
+    }];
+  });
+}
+
+function parseCojInlineDate(value: string): string {
+  return parseDate(/^\d{4}\//.test(value) ? value.replaceAll("/", "-") : value);
 }
 
 function parseCojChargeLine(line: string, category: string, fallbackDate: string): MunicipalLineItem | undefined {
@@ -515,7 +799,7 @@ function parseCojChargeLine(line: string, category: string, fallbackDate: string
 }
 
 function shouldSkipCojChargeLine(line: string): boolean {
-  return /^(Amount|Sub\s*-\s*Total|Total|Current Charges\b|Where can a payment be made\?|YOUR ACCOUNT NUMBER IS YOUR REFERENCE NUMBER)/i.test(line)
+  return /^(Amount|Sub\s*-\s*Total|Total|Current Charges\b|Previous Account Balance\b|Less:\s*Incoming Payment\b|90 DAYS\+|Where can a payment be made\?|YOUR ACCOUNT NUMBER IS YOUR REFERENCE NUMBER)/i.test(line)
     || /^The property rates are based/i.test(line)
     || /^are calculated as follows:?$/i.test(line);
 }
@@ -584,6 +868,44 @@ function checksToWarnings(checks: ParseCheck[]): ParseWarning[] {
   return checks
     .filter((check) => check.status === "failed")
     .map((check) => ({ code: "EJOBURG_RECONCILIATION_FAILED", message: check.message ?? `${check.name} failed.` }));
+}
+
+function statementsMateriallyAgree(left: MunicipalStatement, right: MunicipalStatement): boolean {
+  return left.municipality === right.municipality
+    && optionalStringsAgree(left.accountNumber, right.accountNumber)
+    && left.billingPeriod.from === right.billingPeriod.from
+    && left.billingPeriod.to === right.billingPeriod.to
+    && optionalAmountsAgree(left.openingBalance, right.openingBalance)
+    && optionalAmountsAgree(left.closingBalance, right.closingBalance)
+    && lineItemsAgree(left.charges, right.charges)
+    && lineItemsAgree(left.payments, right.payments);
+}
+
+function optionalStringsAgree(left: string | undefined, right: string | undefined): boolean {
+  return left === undefined || right === undefined || left === right;
+}
+
+function optionalAmountsAgree(left: number | undefined, right: number | undefined): boolean {
+  return left === undefined || right === undefined || amountsEqual(left, right);
+}
+
+function lineItemsAgree(left: MunicipalLineItem[], right: MunicipalLineItem[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const normalizedLeft = left.map(normalizeLineItemForComparison).sort();
+  const normalizedRight = right.map(normalizeLineItemForComparison).sort();
+  return normalizedLeft.every((item, index) => item === normalizedRight[index]);
+}
+
+function normalizeLineItemForComparison(item: MunicipalLineItem): string {
+  return [
+    item.date,
+    item.description.toLowerCase().replace(/\s+/g, " ").trim(),
+    roundMoney(item.amount).toFixed(2),
+    item.currency,
+  ].join("|");
 }
 
 function requiredMatch(lines: string[], pattern: RegExp, message: string): string {

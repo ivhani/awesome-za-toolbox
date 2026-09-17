@@ -12,6 +12,22 @@ export async function createSyntheticPdf(filePath: string, lines: string[]): Pro
     .map((line, index) => `BT /F1 12 Tf 50 ${750 - index * 16} Td (${escapePdfText(line)}) Tj ET`)
     .join("\n");
 
+  await writeSyntheticPdf(filePath, [content]);
+}
+
+export async function createSyntheticPositionedPdf(
+  filePath: string,
+  items: { text: string; x: number; y: number; size?: number }[],
+): Promise<void> {
+  const content = items
+    .map((item) => `BT /F1 ${item.size ?? 12} Tf ${item.x} ${item.y} Td (${escapePdfText(item.text)}) Tj ET`)
+    .join("\n");
+
+  await writeSyntheticPdf(filePath, [content]);
+}
+
+function writeSyntheticPdf(filePath: string, contentStreams: string[]): Promise<void> {
+  const content = contentStreams.join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -36,7 +52,7 @@ export async function createSyntheticPdf(filePath: string, lines: string[]): Pro
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
 
-  await writeFile(filePath, pdf, "latin1");
+  return writeFile(filePath, pdf, "latin1");
 }
 
 export async function createSyntheticXfaPdf(filePath: string, xfaXml: string, lines: string[] = adobeFormPlaceholderLines()): Promise<void> {

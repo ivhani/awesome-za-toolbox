@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "@awesome-za/core": "workspace:*",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
     "@types/pdf-parse": "^1.1.5",
