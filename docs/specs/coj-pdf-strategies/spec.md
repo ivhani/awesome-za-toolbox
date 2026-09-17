@@ -39,6 +39,17 @@ The layout-aware strategy targets flattened COJ tax invoices where useful text i
 - VAT lines,
 - reconciliation checks.
 
+## XFA Summary Scope
+
+The XFA strategy must preserve accounting adjustments that COJ stores in `SummaryBreakdown` rather than `CategoryLineItem` records:
+
+- incoming payments are payments,
+- interest on arrears is a balance charge,
+- deposit releases are credits,
+- summary VAT is used only when detailed category VAT is absent.
+
+When detailed VAT is present, its rounded total must agree with summary VAT. The strategy must fail semantic validation instead of guessing when summary adjustments or VAT do not reconcile the statement. This behavior is isolated to XFA parsing; standard-text and layout-aware parsing remain unchanged.
+
 ## Boundaries
 
 - No workbook or batch parsing behavior.
@@ -55,8 +66,10 @@ The layout-aware strategy targets flattened COJ tax invoices where useful text i
 - Tests exercise all three strategies independently with one or two representative documents or fixtures each.
 - Tests cover consolidation agreement, single-success, all-fail, and disagreement/review behavior.
 - A sanitized regression fixture covers split/corrupted VAT text and verifies that the malformed standard-text parse is rejected semantically.
+- Sanitized XFA regressions cover summary payments, interest, deposit releases, detailed VAT deduplication, summary-only VAT fallback, and unreconciled XFA rejection.
 - Existing standard text and XFA behavior remains passing.
 - The layout-aware strategy extracts and parses selected local private PDFs without OCR or system dependencies.
 - Local validation across the approved 20-account-PDF corpus produces usable consolidated statements, with any genuine review exceptions listed precisely.
+- Local validation across the 47-document full-history corpus produces reconciled statements without regressing the approved 20-document flattened corpus.
 - `pnpm typecheck`, `pnpm test`, `pnpm build`, and production dependency audit pass.
 - The implementation is committed, pushed, and opened as a focused pull request to `main`.

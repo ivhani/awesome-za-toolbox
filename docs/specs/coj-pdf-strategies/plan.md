@@ -26,9 +26,15 @@
    - Reuse common COJ line parsing where the layout renderer can create normalized lines.
    - Add focused warnings and reconciliation checks without exposing source text.
 
-5. Verify against synthetic fixtures and selected private PDFs.
+5. Complete XFA accounting semantics.
+   - Map known `SummaryBreakdown` payments, credits, and balance charges into normalized line items.
+   - Use summary VAT only as a fallback when detailed VAT is absent; reject partial or contradictory VAT totals.
+   - Apply the same required-balance, charge-summary, and final-balance validation before XFA can vote in consolidation.
+
+6. Verify against synthetic fixtures and selected private PDFs.
    - Commit only synthetic fixture generators and tests.
    - Run live validation from the private source paths, including the approved 20-PDF account corpus, and record only non-identifying pass/fail evidence.
+   - Run the separate 47-document full-history corpus and require both live corpora to pass in the same revision.
    - Configure the bundled pdf.js standard-font path if it can be resolved portably in Node.
 
 ## Non-Goals

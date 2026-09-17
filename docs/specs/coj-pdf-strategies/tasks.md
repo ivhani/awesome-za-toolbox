@@ -26,3 +26,10 @@
 - [x] Prove single-success remains review-free while metadata retains all failed peers.
 - [x] Rerun all core gates and the approved 20-document corpus.
 - [x] Update and push the existing pull request with the warning-policy fix.
+- [x] Parse known XFA summary payments, interest, and deposit-release credits.
+- [x] Prevent summary VAT from duplicating detailed XFA VAT.
+- [x] Reject unreconciled XFA results before strategy consolidation.
+- [x] Add focused synthetic XFA regressions for adjustments, VAT fallback/deduplication, and semantic rejection.
+- [x] Revalidate the original 20-document flattened corpus and the 47-document full-history corpus together.
+- [x] Rerun typecheck, full tests, build, and production audit.
+- [x] Commit and push the XFA accounting fix to the existing pull request.

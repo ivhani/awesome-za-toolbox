@@ -18,6 +18,7 @@ import {
   createSyntheticXfaPdf,
   createTempDir,
   syntheticCojXfaDataset,
+  syntheticCojXfaSummaryAdjustmentsDataset,
 } from "../helpers/synthetic-pdf.ts";
 
 test("parses a synthetic eJoburg statement PDF", async () => {
@@ -146,6 +147,33 @@ test("runs XFA as an independent peer strategy", async () => {
   assert.equal(results.find((result) => result.strategy === "layout-aware")?.ok, false);
 });
 
+test("parses XFA summary adjustments without duplicating detailed VAT", async () => {
+  const dir = await createTempDir("za-toolbox-ejoburg-xfa-summary-");
+  const filePath = path.join(dir, "ejoburg-xfa-summary.pdf");
+  await createSyntheticXfaPdf(filePath, syntheticCojXfaSummaryAdjustmentsDataset());
+
+  const result = await parseEjoburgStatement({ filePath });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.metadata.checks[0]?.status, "passed");
+  assert.deepEqual(result.data?.charges.map((item) => item.amount), [100, -10, 15, 10]);
+  assert.deepEqual(result.data?.payments.map((item) => item.amount), [-500, -50]);
+  assert.equal(result.data?.charges.filter((item) => /VAT/i.test(item.description)).length, 1);
+  assert.equal(result.data?.closingBalance, 565);
+});
+
+test("rejects contradictory detailed and summary VAT in XFA statements", async () => {
+  const dir = await createTempDir("za-toolbox-ejoburg-xfa-vat-mismatch-");
+  const filePath = path.join(dir, "ejoburg-xfa-vat-mismatch.pdf");
+  await createSyntheticXfaPdf(filePath, syntheticCojXfaSummaryAdjustmentsDataset({ detailedVat: "10.00" }));
+
+  const results = await runEjoburgParseStrategies({ filePath });
+  const xfa = results.find((result) => result.strategy === "xfa-dataset");
+
+  assert.equal(xfa?.ok, false);
+  assert.equal(xfa?.errors[0]?.code, "EJOBURG_STRATEGY_CHARGE_RECONCILIATION_FAILED");
+});
+
 test("extracts and parses positioned COJ tax-invoice text with the layout-aware strategy", async () => {
   const dir = await createTempDir("za-toolbox-ejoburg-layout-");
   const filePath = path.join(dir, "coj-layout.pdf");
@@ -222,17 +250,22 @@ test("includes interest on arrears in balance reconciliation without treating it
   assert.equal(result.statement.closingBalance, 125);
 });
 
-test("returns reconciliation warnings for mismatched COJ XFA totals", async () => {
+test("rejects mismatched COJ XFA totals before strategy consolidation", async () => {
   const dir = await createTempDir("za-toolbox-ejoburg-xfa-recon-");
   const filePath = path.join(dir, "ejoburg-xfa-recon.pdf");
   await createSyntheticXfaPdf(filePath, syntheticCojXfaDataset({ totalDue: "751.00" }));
 
   const result = await parseEjoburgStatement({ filePath });
 
-  assert.equal(result.ok, true);
-  assert.equal(result.metadata.checks[0]?.status, "failed");
-  assert.equal(result.warnings.at(-1)?.code, "EJOBURG_RECONCILIATION_FAILED");
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0]?.code, "EJOBURG_ALL_STRATEGIES_FAILED");
+  assert.equal(result.metadata.checks.length, 0);
   assert.equal(consolidationReviewRequired(result), true);
+
+  const results = await runEjoburgParseStrategies({ filePath });
+  const xfa = results.find((strategy) => strategy.strategy === "xfa-dataset");
+  assert.equal(xfa?.ok, false);
+  assert.equal(xfa?.errors[0]?.code, "EJOBURG_STRATEGY_BALANCE_RECONCILIATION_FAILED");
 });
 
 test("returns a structured failure for unsupported COJ XFA datasets", async () => {

@@ -479,10 +479,11 @@ export function parseEjoburgStatementXfaDataset(xml: string): { statement: Munic
   const statementDate = parseOptionalXfaDate(firstXmlText(bill, ["BillHeader", "PersonalDetails", "Date"]));
   const lineItemDate = billingPeriod.from ?? statementDate ?? billingPeriod.to;
   const summaryRows = xmlBlocks(bill, "SummaryBreakdown");
-  const summaryAmounts = new Map(summaryRows.map((row) => [
-    normalizeSummaryLabel(firstXmlText(row, ["Description"])),
-    parseOptionalMoney(firstXmlText(row, ["Amount"])),
-  ]).filter((entry): entry is [string, number] => Boolean(entry[0]) && entry[1] !== undefined));
+  const summaryEntries = summaryRows.map((row) => ({
+    description: collapseWhitespace(firstXmlText(row, ["Description"]) ?? ""),
+    amount: parseOptionalMoney(firstXmlText(row, ["Amount"])),
+  })).filter((entry): entry is { description: string; amount: number } => Boolean(entry.description) && entry.amount !== undefined);
+  const summaryAmounts = new Map(summaryEntries.map((entry) => [normalizeSummaryLabel(entry.description), entry.amount]));
 
   const priorBalance = summaryAmounts.get("previous account balance")
     ?? parseOptionalMoney(firstXmlText(bill, ["Summary", "BillSummaryDetails", "Arrears", "TotalOutstanding"]));
@@ -500,7 +501,8 @@ export function parseEjoburgStatementXfaDataset(xml: string): { statement: Munic
       currency: "ZAR",
     });
   }
-  if (vat !== undefined && !hasDescription(lineItems.charges, "VAT @ 15%")) {
+  const detailedVat = sumXfaVatCharges(lineItems.charges);
+  if (vat !== undefined && amountsEqual(detailedVat, 0)) {
     lineItems.charges.push({
       date: lineItemDate,
       description: "VAT @ 15%",
@@ -509,22 +511,32 @@ export function parseEjoburgStatementXfaDataset(xml: string): { statement: Munic
     });
   }
 
+  const serviceChargeTotal = roundMoney(lineItems.charges.reduce((sum, item) => sum + item.amount, 0));
+  if (currentCharges !== undefined && vat !== undefined && !amountsEqual(serviceChargeTotal, roundMoney(currentCharges + vat))) {
+    warnings.push({
+      code: "EJOBURG_CURRENT_CHARGES_MISMATCH",
+      message: "Parsed charge lines do not match the current charges summary.",
+    });
+  }
+
+  appendXfaSummaryAdjustments(summaryEntries, lineItems, lineItemDate);
+
   if (lineItems.charges.length === 0 && lineItems.payments.length === 0) {
     throw new ToolboxError("EJOBURG_XFA_NO_LINE_ITEMS", "No supported City of Johannesburg XFA charges or payments were parsed.");
   }
 
-  return {
-    statement: {
-      municipality: "City of Johannesburg",
-      accountNumber: firstXmlText(bill, ["BillHeader", "InvoiceDetails", "AccountNumber"]),
-      billingPeriod,
-      openingBalance: priorBalance,
-      closingBalance: totalDue,
-      charges: lineItems.charges,
-      payments: lineItems.payments,
-    },
-    warnings,
+  const statement: MunicipalStatement = {
+    municipality: "City of Johannesburg",
+    accountNumber: firstXmlText(bill, ["BillHeader", "InvoiceDetails", "AccountNumber"]),
+    billingPeriod,
+    openingBalance: priorBalance,
+    closingBalance: totalDue,
+    charges: lineItems.charges,
+    payments: lineItems.payments,
   };
+
+  assertValidCojTaxInvoiceStrategyResult(statement, warnings);
+  return { statement, warnings };
 }
 
 function parseXfaBillingPeriod(bill: string): StatementPeriod {
@@ -574,7 +586,7 @@ function parseXfaLineItems(
         currency: "ZAR" as const,
       };
 
-      if (isPaymentDescription(categoryName, rawDescription) || amount < 0) {
+      if (isPaymentDescription(categoryName, rawDescription)) {
         payments.push({ ...lineItem, amount: amount > 0 ? -amount : amount });
       } else {
         charges.push(lineItem);
@@ -592,6 +604,62 @@ function parseXfaLineItems(
   return { charges, payments };
 }
 
+function sumXfaVatCharges(charges: MunicipalLineItem[]): number {
+  return roundMoney(charges
+    .filter((item) => /\bVAT(?:\b|\s*@|:)/i.test(item.description))
+    .reduce((sum, item) => sum + item.amount, 0));
+}
+
+function appendXfaSummaryAdjustments(
+  entries: { description: string; amount: number }[],
+  lineItems: { charges: MunicipalLineItem[]; payments: MunicipalLineItem[] },
+  fallbackDate: string,
+): void {
+  for (const entry of entries) {
+    const normalized = normalizeSummaryLabel(entry.description);
+    if (/^less:\s*incoming payment\b/i.test(normalized)) {
+      appendXfaAdjustment(lineItems.payments, {
+        date: parseXfaSummaryDate(entry.description) ?? fallbackDate,
+        description: "Incoming Payment",
+        amount: entry.amount > 0 ? -entry.amount : entry.amount,
+        currency: "ZAR",
+      }, /\b(?:incoming )?payment\b/i);
+      continue;
+    }
+
+    if (/^interest on arrears\b/i.test(normalized)) {
+      appendXfaAdjustment(lineItems.charges, {
+        date: fallbackDate,
+        description: "Interest on Arrears",
+        amount: entry.amount,
+        currency: "ZAR",
+      }, /\binterest on arrears\b/i);
+      continue;
+    }
+
+    if (/^deposit released\b/i.test(normalized)) {
+      appendXfaAdjustment(lineItems.payments, {
+        date: fallbackDate,
+        description: "Deposit Released",
+        amount: entry.amount > 0 ? -entry.amount : entry.amount,
+        currency: "ZAR",
+      }, /\bdeposit released\b/i);
+    }
+  }
+}
+
+function appendXfaAdjustment(items: MunicipalLineItem[], item: MunicipalLineItem, descriptionPattern: RegExp): void {
+  const alreadyPresent = items.some((existing) => descriptionPattern.test(existing.description) && amountsEqual(existing.amount, item.amount));
+  if (!alreadyPresent && item.amount !== 0) {
+    items.push(item);
+  }
+}
+
+function parseXfaSummaryDate(description: string): string | undefined {
+  const match = description.match(/(\d{4}[/-]\d{2}[/-]\d{2}|\d{2}\/\d{2}\/\d{4})/);
+  return match?.[1] ? parseCojInlineDate(match[1]) : undefined;
+}
+
 function parseXfaLineItemDate(description: string, fallbackDate: string): string {
   const readingPeriod = description.match(/Reading period\s+(\d{4}[/-]\d{2}[/-]\d{2})\s*(?:-|to)\s*(\d{4}[/-]\d{2}[/-]\d{2})/i);
   return readingPeriod?.[1] ? parseDate(readingPeriod[1].replaceAll("/", "-")) : fallbackDate;
@@ -599,10 +667,6 @@ function parseXfaLineItemDate(description: string, fallbackDate: string): string
 
 function isPaymentDescription(categoryName: string, description: string): boolean {
   return /\b(payment|receipt|credit)\b/i.test(`${categoryName} ${description}`);
-}
-
-function hasDescription(items: MunicipalLineItem[], description: string): boolean {
-  return items.some((item) => item.description.toLowerCase() === description.toLowerCase());
 }
 
 function normalizeSummaryLabel(value: string | undefined): string {

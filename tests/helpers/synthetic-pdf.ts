@@ -154,6 +154,45 @@ export function syntheticCojXfaDataset(options: { totalDue?: string } = {}): str
 </xfa:datasets>`;
 }
 
+export function syntheticCojXfaSummaryAdjustmentsDataset(options: { detailedVat?: string; totalDue?: string } = {}): string {
+  const detailedVat = options.detailedVat ?? "15.00";
+  const totalDue = options.totalDue ?? "565.00";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/">
+  <xfa:data>
+    <Bill>
+      <BillHeader>
+        <PersonalDetails><Date>2026/02/28</Date><Period>2026/02</Period></PersonalDetails>
+        <InvoiceDetails><AccountNumber>999000222</AccountNumber></InvoiceDetails>
+      </BillHeader>
+      <Summary>
+        <BillSummaryDetails>
+          <TotalDue>${totalDue}</TotalDue>
+          <SummaryBreakdown><Description>Previous Account Balance</Description><Amount>1,000.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Less: Incoming Payment (Last Payment Made 2026/02/05)</Description><Amount>-500.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Sub Total</Description><Amount>500.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Interest on Arrears</Description><Amount>10.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Current Charges (Excl. VAT)</Description><Amount>90.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>VAT @ 15%</Description><Amount>15.00</Amount></SummaryBreakdown>
+          <SummaryBreakdown><Description>Deposit Released</Description><Amount>-50.00</Amount></SummaryBreakdown>
+        </BillSummaryDetails>
+      </Summary>
+      <Body>
+        <CurrentCharges><TotalDue>${totalDue}</TotalDue></CurrentCharges>
+        <CategoryType>
+          <CategoryName>Water</CategoryName>
+          <CategoryTable>
+            <CategoryLineItem><ItemDescription>Service charge</ItemDescription><ItemAmount>100.00</ItemAmount></CategoryLineItem>
+            <CategoryLineItem><ItemDescription>Service correction</ItemDescription><ItemAmount>-10.00</ItemAmount></CategoryLineItem>
+            <CategoryLineItem><ItemDescription>VAT: 15.00%</ItemDescription><ItemAmount>${detailedVat}</ItemAmount></CategoryLineItem>
+          </CategoryTable>
+        </CategoryType>
+      </Body>
+    </Bill>
+  </xfa:data>
+</xfa:datasets>`;
+}
+
 function adobeFormPlaceholderLines(): string[] {
   return [
     "Please wait...",
