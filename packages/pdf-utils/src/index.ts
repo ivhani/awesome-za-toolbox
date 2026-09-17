@@ -1,8 +1,14 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { inflateRawSync, inflateSync, unzipSync } from "node:zlib";
 import pdfParse from "pdf-parse";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { ToolboxError, assertReadableFile } from "@awesome-za/core";
+
+const PDFJS_STANDARD_FONT_DATA_URL = `${fileURLToPath(new URL(
+  "../../standard_fonts/",
+  import.meta.resolve("pdfjs-dist/legacy/build/pdf.mjs"),
+)).replaceAll("\\", "/").replace(/\/+$/, "")}/`;
 
 export interface ExtractedPdfText {
   text: string;
@@ -57,6 +63,7 @@ export async function extractPdfLayoutText(filePath: string): Promise<ExtractedP
   const document = await getDocument({
     data: new Uint8Array(buffer),
     disableFontFace: true,
+    standardFontDataUrl: PDFJS_STANDARD_FONT_DATA_URL,
     useSystemFonts: false,
   }).promise;
   const items: PdfLayoutTextItem[] = [];

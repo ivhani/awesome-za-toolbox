@@ -15,6 +15,9 @@
 - The public parser will keep returning `ParseResult<MunicipalStatement>`.
 - Review-required disagreement will be a structured parse failure with strategy diagnostics, because returning a chosen statement would silently prefer one strategy.
 - Synthetic fixtures will be generated in tests rather than committed as private PDF artifacts.
+- COJ tax-invoice strategy success requires both balances, agreement between detailed service charges and the current-charge/VAT summary, and a passed full balance reconciliation.
+- Interest on arrears is a balance-level charge: it participates in full reconciliation but is excluded from the narrower current-charge/VAT subtotal.
+- Incoming-payment amounts are parsed from the trailing monetary token so adjacent dates cannot be fused into a value.
 
 ## Private Live Validation
 
@@ -27,3 +30,4 @@ Do not copy these PDFs into the repository. Do not commit raw extracted text or 
 - Positioned text extraction can vary across PDF producers and fonts.
 - The layout-aware renderer must avoid overfitting to private line coordinates while still reproducing the observed split-heading shape in synthetic fixtures.
 - Disagreement comparison should be strict enough to prevent silent data corruption but tolerant of row ordering and harmless statement field omissions.
+- Summary labels ending in punctuation require explicit whitespace/end lookaheads; word boundaries after `%` and `)` do not reliably match inline values.

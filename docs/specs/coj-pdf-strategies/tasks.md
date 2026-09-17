@@ -16,3 +16,9 @@
 - [x] Run `pnpm audit --prod`.
 - [x] Record verification evidence and limitations.
 - [x] Commit, push branch, and open pull request to `main`.
+- [x] Add semantic strategy validation and coded failure diagnostics.
+- [x] Add a sanitized split/corrupted VAT regression fixture.
+- [x] Resolve the repeated pdf.js standard-font warning if portable.
+- [x] Revalidate one or two private layout samples and all 20 approved account PDFs.
+- [x] Rerun typecheck, full tests, build, and production audit.
+- [x] Update and push the existing pull request.

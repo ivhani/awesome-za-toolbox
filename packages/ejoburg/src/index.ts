@@ -338,7 +338,9 @@ function parseCojTaxInvoiceText(lines: string[]): { statement: MunicipalStatemen
   const warnings: ParseWarning[] = [];
   const summaryAmounts = parseSummaryAmounts(lines);
   const billingPeriod = parseCojBillingPeriod(lines);
-  const charges = parseCojChargeLines(lines, warnings, billingPeriod.from);
+  const serviceCharges = parseCojChargeLines(lines, warnings, billingPeriod.from);
+  const balanceCharges = parseCojBalanceChargeLines(lines, billingPeriod.from);
+  const charges = [...serviceCharges, ...balanceCharges];
   const payments = parseCojPaymentLines(lines, billingPeriod.from);
 
   if (charges.length === 0) {
@@ -348,26 +350,51 @@ function parseCojTaxInvoiceText(lines: string[]): { statement: MunicipalStatemen
   const currentCharges = summaryAmounts.get("current charges (excl. vat)") ?? sumChargesExcludingVat(charges);
   const vat = summaryAmounts.get("vat @ 15%") ?? sumVatCharges(charges);
 
-  return {
-    statement: {
-      municipality: "City of Johannesburg",
-      accountNumber: parseCojAccountNumber(lines),
-      billingPeriod,
-      openingBalance: summaryAmounts.get("previous account balance"),
-      closingBalance: summaryAmounts.get("total due") ?? findLabeledMoney(lines, [/^Total Due\b/i, /^TOTAL AMOUNT OUTSTANDING\b/i]),
-      charges,
-      payments,
-    },
-    warnings: [
-      ...warnings,
-      ...(amountsEqual(roundMoney(currentCharges + vat), roundMoney(charges.reduce((sum, item) => sum + item.amount, 0)))
-        ? []
-        : [{
-          code: "EJOBURG_CURRENT_CHARGES_MISMATCH",
-          message: "Parsed charge lines do not match the current charges summary.",
-        } satisfies ParseWarning]),
-    ],
+  const statement: MunicipalStatement = {
+    municipality: "City of Johannesburg",
+    accountNumber: parseCojAccountNumber(lines),
+    billingPeriod,
+    openingBalance: summaryAmounts.get("previous account balance"),
+    closingBalance: summaryAmounts.get("total due") ?? findLabeledMoney(lines, [/^Total Due\b/i, /^TOTAL AMOUNT OUTSTANDING\b/i]),
+    charges,
+    payments,
   };
+  const resultWarnings = [
+    ...warnings,
+    ...(amountsEqual(roundMoney(currentCharges + vat), roundMoney(serviceCharges.reduce((sum, item) => sum + item.amount, 0)))
+      ? []
+      : [{
+        code: "EJOBURG_CURRENT_CHARGES_MISMATCH",
+        message: "Parsed charge lines do not match the current charges summary.",
+      } satisfies ParseWarning]),
+  ];
+
+  assertValidCojTaxInvoiceStrategyResult(statement, resultWarnings);
+  return { statement, warnings: resultWarnings };
+}
+
+function assertValidCojTaxInvoiceStrategyResult(statement: MunicipalStatement, warnings: ParseWarning[]): void {
+  const hasRequiredBalances = statement.openingBalance !== undefined && statement.closingBalance !== undefined;
+  if (!hasRequiredBalances) {
+    throw new ToolboxError(
+      "EJOBURG_STRATEGY_MISSING_BALANCES",
+      "Parsed City of Johannesburg tax-invoice data is missing a required opening or closing balance.",
+    );
+  }
+
+  if (warnings.some((warning) => warning.code === "EJOBURG_CURRENT_CHARGES_MISMATCH")) {
+    throw new ToolboxError(
+      "EJOBURG_STRATEGY_CHARGE_RECONCILIATION_FAILED",
+      "Parsed City of Johannesburg tax-invoice charges do not reconcile to the statement charge summary.",
+    );
+  }
+
+  if (buildChecks(statement).some((check) => check.status !== "passed")) {
+    throw new ToolboxError(
+      "EJOBURG_STRATEGY_BALANCE_RECONCILIATION_FAILED",
+      "Parsed City of Johannesburg tax-invoice balances, charges, and payments do not reconcile.",
+    );
+  }
 }
 
 function parseSection(
@@ -660,8 +687,8 @@ function parseSummaryAmounts(lines: string[]): Map<string, number> {
   for (const line of lines) {
     for (const [label, pattern] of [
       ["previous account balance", /^Previous Account Balance\b/i],
-      ["current charges (excl. vat)", /^Current Charges \(Excl\. VAT\)\b/i],
-      ["vat @ 15%", /^VAT @ 15%\b/i],
+      ["current charges (excl. vat)", /^Current Charges \(Excl\. VAT\)(?=\s|$)/i],
+      ["vat @ 15%", /^VAT @ 15%(?=\s|$)/i],
       ["total due", /\bTotal Due\b/i],
     ] as const) {
       if (!pattern.test(line)) {
@@ -750,7 +777,7 @@ function parseCojPaymentLines(lines: string[], fallbackDate: string): MunicipalL
       return [];
     }
 
-    const amount = parseMoneyFromLine(line);
+    const amount = parseTrailingMoneyFromLine(line);
     if (amount === undefined || amount === 0) {
       return [];
     }
@@ -760,6 +787,26 @@ function parseCojPaymentLines(lines: string[], fallbackDate: string): MunicipalL
       date: dateMatch?.[1] ? parseCojInlineDate(dateMatch[1]) : fallbackDate,
       description: "Incoming Payment",
       amount: amount > 0 ? -amount : amount,
+      currency: "ZAR" as const,
+    }];
+  });
+}
+
+function parseCojBalanceChargeLines(lines: string[], fallbackDate: string): MunicipalLineItem[] {
+  return lines.flatMap((line) => {
+    if (!/^Interest on Arrears\b/i.test(line)) {
+      return [];
+    }
+
+    const amount = parseMoneyFromLine(line);
+    if (amount === undefined || amount === 0) {
+      return [];
+    }
+
+    return [{
+      date: fallbackDate,
+      description: "Interest on Arrears",
+      amount,
       currency: "ZAR" as const,
     }];
   });
@@ -799,7 +846,7 @@ function parseCojChargeLine(line: string, category: string, fallbackDate: string
 }
 
 function shouldSkipCojChargeLine(line: string): boolean {
-  return /^(Amount|Sub\s*-\s*Total|Total|Current Charges\b|Previous Account Balance\b|Less:\s*Incoming Payment\b|90 DAYS\+|Where can a payment be made\?|YOUR ACCOUNT NUMBER IS YOUR REFERENCE NUMBER)/i.test(line)
+  return /^(Amount|Sub\s*-\s*Total|Total|Current Charges\b|Previous Account Balance\b|Less:\s*Incoming Payment\b|Interest on Arrears\b|90 DAYS\+|Where can a payment be made\?|YOUR ACCOUNT NUMBER IS YOUR REFERENCE NUMBER)/i.test(line)
     || /^The property rates are based/i.test(line)
     || /^are calculated as follows:?$/i.test(line);
 }
@@ -1019,6 +1066,15 @@ function parseMoneyFromLine(value: string | undefined): number | undefined {
   }
 
   const match = value.trim().match(/(?:R|ZAR)?\s*(?:\(\s*[\d,\s]+\.\d{2}\s*\)|-\s*[\d,\s]+\.\d{2}|[\d,\s]+\.\d{2})/i);
+  return match?.[0] ? parseMoney(match[0]) : undefined;
+}
+
+function parseTrailingMoneyFromLine(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const match = value.trim().match(/(?:R|ZAR)?\s*(?:\(\s*[\d,]+\.\d{2}\s*\)|-\s*[\d,]+\.\d{2}|[\d,]+\.\d{2})\s*$/i);
   return match?.[0] ? parseMoney(match[0]) : undefined;
 }
 

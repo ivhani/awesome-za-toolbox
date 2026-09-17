@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { createMetadata, type ParseResult } from "@awesome-za/core";
+import { createMetadata, ToolboxError, type ParseResult } from "@awesome-za/core";
 import {
   consolidateEjoburgStrategyResults,
   parseEjoburgStatement,
+  parseEjoburgStatementText,
   runEjoburgParseStrategies,
   type EjoburgStrategyResult,
 } from "@awesome-za/ejoburg";
@@ -167,6 +169,57 @@ test("extracts and parses positioned COJ tax-invoice text with the layout-aware 
   assert.equal(result.ok, true);
   assert.equal(consolidationStatus(result), "single-success");
   assert.equal(result.data?.charges.reduce((sum, item) => Math.round((sum + item.amount) * 100) / 100, 0), 803.89);
+});
+
+test("rejects corrupted standard text before it can vote in strategy consolidation", async () => {
+  const fixturePath = path.join(process.cwd(), "tests", "fixtures", "text", "ejoburg-coj-tax-invoice-corrupted-standard.txt");
+  const text = await readFile(fixturePath, "utf8");
+
+  assert.throws(
+    () => parseEjoburgStatementText(text),
+    (error: unknown) => error instanceof ToolboxError && error.code === "EJOBURG_STRATEGY_MISSING_BALANCES",
+  );
+  assert.throws(
+    () => parseEjoburgStatementText(`${text}\nTotal Due 805.00`),
+    (error: unknown) => error instanceof ToolboxError && error.code === "EJOBURG_STRATEGY_CHARGE_RECONCILIATION_FAILED",
+  );
+});
+
+test("classifies semantically invalid standard PDF text as a failed strategy", async () => {
+  const dir = await createTempDir("za-toolbox-ejoburg-corrupted-standard-");
+  const filePath = path.join(dir, "coj-corrupted-standard.pdf");
+  const fixturePath = path.join(process.cwd(), "tests", "fixtures", "text", "ejoburg-coj-tax-invoice-corrupted-standard.txt");
+  const text = await readFile(fixturePath, "utf8");
+  await createSyntheticPdf(filePath, text.split(/\r?\n/));
+
+  const results = await runEjoburgParseStrategies({ filePath });
+  const standardResult = results.find((result) => result.strategy === "standard-text");
+
+  assert.equal(standardResult?.ok, false);
+  assert.equal(standardResult?.errors[0]?.code, "EJOBURG_STRATEGY_MISSING_BALANCES");
+  assert.equal(standardResult?.statement, undefined);
+});
+
+test("includes interest on arrears in balance reconciliation without treating it as a current-charge subtotal", () => {
+  const result = parseEjoburgStatementText([
+    "TAX INVOICE",
+    "Account Number: 558000000",
+    "Statement for January 2026",
+    "Previous Account Balance 1,000.00",
+    "Less: Incoming Payment Last Payment Made 2026/01/05 1,000.00",
+    "Sub Total 0.00",
+    "Interest on Arrears 10.00",
+    "Current Charges (Excl. VAT) 100.00",
+    "VAT @ 15% 15.00",
+    "Total Due 125.00",
+    "Services VAT 1234567890 Sub - Total Total",
+    "Service charge ( Billing Period 2026/01 )100.00",
+    "VAT: 15%15.00",
+  ].join("\n"));
+
+  assert.deepEqual(result.statement.charges.map((item) => item.amount), [100, 15, 10]);
+  assert.deepEqual(result.statement.payments.map((item) => item.amount), [-1000]);
+  assert.equal(result.statement.closingBalance, 125);
 });
 
 test("returns reconciliation warnings for mismatched COJ XFA totals", async () => {

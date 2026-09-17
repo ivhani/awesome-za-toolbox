@@ -18,12 +18,14 @@ za-toolbox municipal ejoburg parse <pdf> --format json|csv --output <path>
 
 - The normal single-file parse path runs all three strategies independently.
 - Each strategy returns a standard result envelope with strategy identity, success or failure, optional parsed `MunicipalStatement`, warnings, errors, and provenance safe for review.
+- A strategy is successful only when its parsed statement passes semantic validation. A schema-shaped result with missing required COJ balances or failed balance reconciliation is a failed strategy with coded diagnostics.
 - The parser retains every per-strategy result in structured metadata.
 - If successful strategies materially agree, the parser consolidates deterministically into the ordinary `MunicipalStatement` output.
 - If only one strategy succeeds, the parser returns that statement and preserves other strategy failures as diagnostics.
 - If successful strategies materially disagree, the parser marks the result for review and does not silently choose a winner.
 - If every strategy fails, the parser returns a structured failure.
 - The parser never invents missing values.
+- Corrupted standard-text extraction must not outvote a coherent peer merely because it emitted line items.
 
 ## Layout-Aware Scope
 
@@ -50,8 +52,9 @@ The layout-aware strategy targets flattened COJ tax invoices where useful text i
 - No workbook POC files or workbook dependencies appear in the diff.
 - Tests exercise all three strategies independently with one or two representative documents or fixtures each.
 - Tests cover consolidation agreement, single-success, all-fail, and disagreement/review behavior.
+- A sanitized regression fixture covers split/corrupted VAT text and verifies that the malformed standard-text parse is rejected semantically.
 - Existing standard text and XFA behavior remains passing.
 - The layout-aware strategy extracts and parses selected local private PDFs without OCR or system dependencies.
+- Local validation across the approved 20-account-PDF corpus produces usable consolidated statements, with any genuine review exceptions listed precisely.
 - `pnpm typecheck`, `pnpm test`, `pnpm build`, and production dependency audit pass.
 - The implementation is committed, pushed, and opened as a focused pull request to `main`.
-

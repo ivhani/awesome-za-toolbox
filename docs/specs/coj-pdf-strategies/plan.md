@@ -13,6 +13,8 @@
    - Ensure each strategy catches ordinary parse failures and returns a structured result.
 
 3. Add deterministic consolidation.
+   - Validate each parsed statement before it enters consolidation, including required COJ balance fields and balance reconciliation.
+   - Convert semantic validation failures into ordinary failed-strategy diagnostics.
    - Compare successful strategy statements on core fields and rounded totals.
    - Return a normal `ParseResult<MunicipalStatement>` when there is one success or all successes agree.
    - Return a structured review-required failure when successful statements materially disagree.
@@ -25,7 +27,8 @@
 
 5. Verify against synthetic fixtures and selected private PDFs.
    - Commit only synthetic fixture generators and tests.
-   - Run live validation from the private source paths and record only pass/fail evidence.
+   - Run live validation from the private source paths, including the approved 20-PDF account corpus, and record only non-identifying pass/fail evidence.
+   - Configure the bundled pdf.js standard-font path if it can be resolved portably in Node.
 
 ## Non-Goals
 
@@ -33,4 +36,3 @@
 - General OCR or scanned statement support.
 - A public CLI flag for choosing strategies.
 - Persisting private extraction output.
-
