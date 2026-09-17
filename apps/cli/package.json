@@ -42,13 +42,17 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean",
+    "build": "tsup src/index.ts --format esm --dts --clean --external exceljs",
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
     "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
   },
   "devDependencies": {
     "@awesome-za/ejoburg": "workspace:*",
     "@awesome-za/fnb": "workspace:*",
+    "@awesome-za/workbooks": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "tsx": "^4.20.5"

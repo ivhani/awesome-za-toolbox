@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { parseFnbStatement } from "@awesome-za/fnb";
 import { parseEjoburgStatement } from "@awesome-za/ejoburg";
 import { extractPdfText } from "@awesome-za/pdf-utils";
+import { createOrUpdateCojWorkbook } from "@awesome-za/workbooks";
 import type { BankStatement, MunicipalStatement } from "@awesome-za/schemas";
 import type { ParseResult } from "@awesome-za/core";
 
@@ -27,6 +28,10 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
+  if (options.command.join(" ") === "municipal ejoburg workbook") {
+    return runEjoburgWorkbookCommand(options);
+  }
+
   const result = await runCommand(options);
 
   if (!result.ok) {
@@ -47,6 +52,28 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(output);
   }
 
+  return 0;
+}
+
+async function runEjoburgWorkbookCommand(options: CliOptions): Promise<number> {
+  if (!options.filePath) {
+    throw new Error("Missing input folder path.");
+  }
+  if (!options.output) {
+    throw new Error("The workbook command requires --output <workbook.xlsx>.");
+  }
+
+  const result = await createOrUpdateCojWorkbook({
+    inputDirectory: options.filePath,
+    workbookPath: options.output,
+  });
+
+  for (const row of result.rows.filter((candidate) => candidate.reviewStatus !== "OK")) {
+    process.stderr.write(`review ${row.sourceFileName}: ${row.reviewStatus}\n`);
+  }
+  process.stdout.write(
+    `Wrote ${result.statementsParsed} statement(s) from ${result.filesDiscovered} PDF file(s) to ${result.workbookPath}; ${result.reviewRequired} row(s) require review.\n`,
+  );
   return 0;
 }
 
@@ -198,6 +225,7 @@ function printHelp(): void {
 Usage:
   za-toolbox bank fnb parse <pdf> --format json|csv --output <path>
   za-toolbox municipal ejoburg parse <pdf> --format json|csv --output <path>
+  za-toolbox municipal ejoburg workbook <folder> --output <workbook.xlsx>
   za-toolbox dev extract-text <pdf> --output <path>
 
 Options:

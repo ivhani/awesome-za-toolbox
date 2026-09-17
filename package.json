@@ -11,13 +11,14 @@
   "scripts": {
     "build": "pnpm -r build",
     "clean": "pnpm -r clean",
-    "test": "node --import tsx --test tests/unit/fnb.test.ts tests/unit/ejoburg.test.ts tests/unit/text-fixtures.test.ts tests/cli/cli.test.ts",
+    "test": "node --import tsx --test tests/unit/fnb.test.ts tests/unit/ejoburg.test.ts tests/unit/workbooks.test.ts tests/unit/text-fixtures.test.ts tests/cli/cli.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.13.14",
-    "tsx": "^4.20.5",
+    "exceljs": "4.4.0",
     "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
 }

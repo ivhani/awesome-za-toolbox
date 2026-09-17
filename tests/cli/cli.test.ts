@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import ExcelJS from "exceljs";
 import { createSyntheticPdf, createTempDir } from "../helpers/synthetic-pdf.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -88,6 +89,33 @@ test("CLI extracts PDF text for private fixture inspection", async () => {
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(await readFile(output, "utf8"), /FNB BANK STATEMENT/);
+});
+
+test("CLI writes a COJ workbook from a folder", async () => {
+  const dir = await createTempDir("za-toolbox-cli-workbook-");
+  const inputDirectory = path.join(dir, "statements");
+  const output = path.join(dir, "tax-workbook.xlsx");
+  await mkdir(inputDirectory);
+  await createSyntheticPdf(path.join(inputDirectory, "coj.pdf"), [
+    "CITY OF JOHANNESBURG MUNICIPAL STATEMENT",
+    "Account: 123456789",
+    "Billing Period: 2026-01-01 to 2026-01-31",
+    "Opening Balance: 500.00",
+    "Closing Balance: 750.00",
+    "Charges:",
+    "2026-01-03 | Electricity | 300.00 | ELEC",
+    "2026-01-04 | Water | 100.00 | WATER",
+    "Payments:",
+    "2026-01-20 | Payment received | -150.00 | EFT",
+  ]);
+
+  const result = runCli(["municipal", "ejoburg", "workbook", inputDirectory, "--output", output]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Wrote 1 statement/);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(output);
+  assert.equal(workbook.getWorksheet("COJ")?.getCell("A2").value, 2026);
 });
 
 function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {

@@ -8,6 +8,7 @@ This repository currently contains parser-only tooling:
 
 - FNB bank statement PDF to normalized JSON or CSV
 - eJoburg municipal statement PDF to normalized JSON or CSV
+- Folder of eJoburg municipal statements to a consolidated Excel workbook
 - One published CLI package: `za-toolbox`
 - Private workspace packages that can later become `@awesome-za/*` public packages
 
@@ -27,13 +28,17 @@ pnpm build
 
 pnpm --filter za-toolbox start -- bank fnb parse ./statement.pdf --format json --output statement.json
 pnpm --filter za-toolbox start -- municipal ejoburg parse ./invoice.pdf --format csv --output invoice.csv
+pnpm --filter za-toolbox start -- municipal ejoburg workbook ./coj-statements --output tax-workbook.xlsx
 ```
 
 Once published:
 
 ```bash
 npx za-toolbox bank fnb parse ./statement.pdf --format json --output statement.json
+npx za-toolbox municipal ejoburg workbook ./coj-statements --output tax-workbook.xlsx
 ```
+
+The workbook command creates the destination when it is missing. When the workbook exists, it preserves existing sheets and adds a `COJ` sheet with one monthly summary row per statement. Files that cannot be parsed are retained as review rows instead of stopping the batch.
 
 ## Private fixture workflow
 
