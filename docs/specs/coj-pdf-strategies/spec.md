@@ -22,6 +22,8 @@ za-toolbox municipal ejoburg parse <pdf> --format json|csv --output <path>
 - The parser retains every per-strategy result in structured metadata.
 - If successful strategies materially agree, the parser consolidates deterministically into the ordinary `MunicipalStatement` output.
 - If only one strategy succeeds, the parser returns that statement and preserves other strategy failures as diagnostics.
+- Failed peer strategies remain in metadata and do not create top-level warnings when the selected single-success statement is validated and reconciled.
+- Top-level warnings are reserved for warnings from the selected strategy and failed final reconciliation checks; all-failed and disagreement remain structured failures requiring review.
 - If successful strategies materially disagree, the parser marks the result for review and does not silently choose a winner.
 - If every strategy fails, the parser returns a structured failure.
 - The parser never invents missing values.

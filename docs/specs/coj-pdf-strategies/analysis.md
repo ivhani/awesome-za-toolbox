@@ -18,6 +18,8 @@
 - COJ tax-invoice strategy success requires both balances, agreement between detailed service charges and the current-charge/VAT summary, and a passed full balance reconciliation.
 - Interest on arrears is a balance-level charge: it participates in full reconciliation but is excluded from the narrower current-charge/VAT subtotal.
 - Incoming-payment amounts are parsed from the trailing monetary token so adjacent dates cannot be fused into a value.
+- Failed peers are provenance, not selected-result warnings. They remain in `metadata.strategies`; only selected-strategy warnings and final reconciliation warnings are promoted to the top-level result.
+- A successful consolidation sets `reviewRequired` when its selected warnings or final checks produce top-level warnings.
 
 ## Private Live Validation
 

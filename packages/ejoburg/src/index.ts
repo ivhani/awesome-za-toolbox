@@ -136,18 +136,9 @@ export function consolidateEjoburgStrategyResults(
     });
   }
 
-  const parsed = {
-    statement: selected.statement,
-    warnings: [
-      ...selected.warnings,
-      ...strategyResults.filter((result) => !result.ok).map((result) => ({
-        code: "EJOBURG_STRATEGY_FAILED",
-        message: `${result.strategy} did not produce a statement.`,
-      } satisfies ParseWarning)),
-    ],
-  };
-  const checks = buildChecks(parsed.statement);
-  const warnings = [...parsed.warnings, ...checksToWarnings(checks)];
+  const checks = buildChecks(selected.statement);
+  const warnings = [...selected.warnings, ...checksToWarnings(checks)];
+  const reviewRequired = warnings.length > 0;
   const metadata: EjoburgParseMetadata = {
     ...metadataBase,
     confidence: checks.some((check) => check.status === "failed") ? "medium" : "high",
@@ -155,13 +146,13 @@ export function consolidateEjoburgStrategyResults(
     consolidation: {
       status: successful.length === 1 ? "single-success" : "agreed",
       selectedStrategy: selected.strategy,
-      reviewRequired: false,
+      reviewRequired,
       successfulStrategies: successful.map((result) => result.strategy),
     },
   };
 
   return okResult({
-    data: parsed.statement,
+    data: selected.statement,
     warnings,
     metadata,
   });

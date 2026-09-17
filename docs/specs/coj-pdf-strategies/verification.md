@@ -18,6 +18,15 @@ Two representative private PDFs and the complete approved 20-PDF corpus were val
 - Strategy pattern across all 20: layout-aware was the sole successful strategy; standard text was rejected with `EJOBURG_STRATEGY_MISSING_BALANCES`; XFA returned `PDF_XFA_DATASET_NOT_FOUND`.
 - Five statements contained an interest-on-arrears summary charge. Parsing that charge separately resolved their initial balance-reconciliation failures without weakening validation.
 
+## Warning-Policy Retest
+
+- `pnpm typecheck` passed.
+- `pnpm test` passed: 31 tests, 31 passing.
+- `pnpm build` passed.
+- `pnpm audit --prod` passed with no known vulnerabilities.
+- Complete private corpus: 20 of 20 usable, 20 of 20 top-level warning-free, 20 of 20 `reviewRequired: false`, 20 of 20 reconciled, and 20 of 20 retained both expected failed peers in strategy metadata.
+- Selected-strategy warnings and failed final reconciliation checks remain top-level warnings and set `reviewRequired: true`; all-failed and disagreement remain structured review failures.
+
 No private PDFs were copied into the repository. No raw extracted private text, account details, names, addresses, balances, or transaction values were committed.
 
 ## Scope Check

@@ -15,6 +15,7 @@
 3. Add deterministic consolidation.
    - Validate each parsed statement before it enters consolidation, including required COJ balance fields and balance reconciliation.
    - Convert semantic validation failures into ordinary failed-strategy diagnostics.
+   - Keep expected failed-peer diagnostics in strategy metadata instead of promoting them to top-level warnings on a valid single-success result.
    - Compare successful strategy statements on core fields and rounded totals.
    - Return a normal `ParseResult<MunicipalStatement>` when there is one success or all successes agree.
    - Return a structured review-required failure when successful statements materially disagree.

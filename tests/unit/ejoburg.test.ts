@@ -232,6 +232,7 @@ test("returns reconciliation warnings for mismatched COJ XFA totals", async () =
   assert.equal(result.ok, true);
   assert.equal(result.metadata.checks[0]?.status, "failed");
   assert.equal(result.warnings.at(-1)?.code, "EJOBURG_RECONCILIATION_FAILED");
+  assert.equal(consolidationReviewRequired(result), true);
 });
 
 test("returns a structured failure for unsupported COJ XFA datasets", async () => {
@@ -271,7 +272,29 @@ test("consolidates a single successful strategy while preserving failed peer dia
 
   assert.equal(result.ok, true);
   assert.equal(consolidationStatus(result), "single-success");
-  assert.equal(result.warnings.filter((warning) => warning.code === "EJOBURG_STRATEGY_FAILED").length, 2);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(consolidationReviewRequired(result), false);
+  assert.deepEqual(strategyDiagnosticStates(result), [
+    { strategy: "standard-text", ok: false, errorCodes: ["PARSE_FAILED"] },
+    { strategy: "xfa-dataset", ok: true, errorCodes: [] },
+    { strategy: "layout-aware", ok: false, errorCodes: ["EJOBURG_LAYOUT_UNSUPPORTED"] },
+  ]);
+});
+
+test("preserves selected-strategy warnings as review-required without promoting failed peers", () => {
+  const result = consolidateEjoburgStrategyResults([
+    failedStrategy("standard-text", "PARSE_FAILED"),
+    successfulStrategy("xfa-dataset", sampleMunicipalStatement(), [{
+      code: "EJOBURG_SELECTED_STRATEGY_WARNING",
+      message: "Selected strategy requires review.",
+    }]),
+    failedStrategy("layout-aware", "EJOBURG_LAYOUT_UNSUPPORTED"),
+  ], testMetadata());
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.warnings.map((warning) => warning.code), ["EJOBURG_SELECTED_STRATEGY_WARNING"]);
+  assert.equal(consolidationReviewRequired(result), true);
+  assert.equal(strategyDiagnosticStates(result).filter((diagnostic) => !diagnostic.ok).length, 2);
 });
 
 test("requires review instead of choosing a winner when successful strategies disagree", () => {
@@ -356,12 +379,16 @@ function sampleMunicipalStatement(): MunicipalStatement {
   };
 }
 
-function successfulStrategy(strategy: EjoburgStrategyResult["strategy"], statement: MunicipalStatement): EjoburgStrategyResult {
+function successfulStrategy(
+  strategy: EjoburgStrategyResult["strategy"],
+  statement: MunicipalStatement,
+  warnings: EjoburgStrategyResult["warnings"] = [],
+): EjoburgStrategyResult {
   return {
     strategy,
     ok: true,
     statement,
-    warnings: [],
+    warnings,
     errors: [],
     provenance: strategy === "xfa-dataset" ? { extraction: "xfa-dataset" } : { extraction: strategy === "layout-aware" ? "layout-text" : "pdf-text" },
   };
@@ -379,4 +406,19 @@ function failedStrategy(strategy: EjoburgStrategyResult["strategy"], code: strin
 
 function consolidationStatus(result: ParseResult<MunicipalStatement>): string | undefined {
   return (result.metadata as typeof result.metadata & { consolidation?: { status: string } }).consolidation?.status;
+}
+
+function consolidationReviewRequired(result: ParseResult<MunicipalStatement>): boolean | undefined {
+  return (result.metadata as typeof result.metadata & { consolidation?: { reviewRequired: boolean } }).consolidation?.reviewRequired;
+}
+
+function strategyDiagnosticStates(result: ParseResult<MunicipalStatement>): { strategy: string; ok: boolean; errorCodes: string[] }[] {
+  const metadata = result.metadata as typeof result.metadata & {
+    strategies?: { strategy: string; ok: boolean; errors: { code: string }[] }[];
+  };
+  return metadata.strategies?.map((diagnostic) => ({
+    strategy: diagnostic.strategy,
+    ok: diagnostic.ok,
+    errorCodes: diagnostic.errors.map((error) => error.code),
+  })) ?? [];
 }

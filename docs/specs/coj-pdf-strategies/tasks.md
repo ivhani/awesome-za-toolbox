@@ -22,3 +22,7 @@
 - [x] Revalidate one or two private layout samples and all 20 approved account PDFs.
 - [x] Rerun typecheck, full tests, build, and production audit.
 - [x] Update and push the existing pull request.
+- [x] Keep failed-peer diagnostics out of top-level warnings for validated single-success results.
+- [x] Prove single-success remains review-free while metadata retains all failed peers.
+- [x] Rerun all core gates and the approved 20-document corpus.
+- [x] Update and push the existing pull request with the warning-policy fix.
