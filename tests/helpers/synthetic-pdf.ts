@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { deflateSync } from "node:zlib";
 
 export async function createTempDir(prefix: string): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), prefix));
@@ -36,6 +37,114 @@ export async function createSyntheticPdf(filePath: string, lines: string[]): Pro
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
 
   await writeFile(filePath, pdf, "latin1");
+}
+
+export async function createSyntheticXfaPdf(filePath: string, xfaXml: string, lines: string[] = adobeFormPlaceholderLines()): Promise<void> {
+  const content = lines
+    .map((line, index) => `BT /F1 12 Tf 50 ${750 - index * 16} Td (${escapePdfText(line)}) Tj ET`)
+    .join("\n");
+  const xfaStream = deflateSync(Buffer.from(xfaXml, "utf8"));
+
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${xfaStream.length} /Filter /FlateDecode >>\nstream\n${xfaStream.toString("latin1")}\nendstream`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (const offset of offsets.slice(1)) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  await writeFile(filePath, pdf, "latin1");
+}
+
+export function syntheticCojXfaDataset(options: { totalDue?: string } = {}): string {
+  const totalDue = options.totalDue ?? "750.00";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/">
+  <xfa:data>
+    <Bill>
+      <BillHeader>
+        <PersonalDetails>
+          <Date>2026/01/31</Date>
+          <Period>2026/01</Period>
+        </PersonalDetails>
+        <InvoiceDetails>
+          <AccountNumber>999000111</AccountNumber>
+          <InvoiceNumber>INV-2026-01</InvoiceNumber>
+        </InvoiceDetails>
+      </BillHeader>
+      <Summary>
+        <BillSummaryDetails>
+          <TotalDue>${totalDue}</TotalDue>
+          <SummaryBreakdown>
+            <Description>Previous Account Balance</Description>
+            <Amount>500.00</Amount>
+          </SummaryBreakdown>
+          <SummaryBreakdown>
+            <Description>Current Charges (Excl. VAT)</Description>
+            <Amount>650.00</Amount>
+          </SummaryBreakdown>
+          <SummaryBreakdown>
+            <Description>VAT @ 15%</Description>
+            <Amount>100.00</Amount>
+          </SummaryBreakdown>
+        </BillSummaryDetails>
+      </Summary>
+      <Body>
+        <CurrentCharges>
+          <TotalDue>${totalDue}</TotalDue>
+        </CurrentCharges>
+        <CategoryType>
+          <CategoryName>Water</CategoryName>
+          <CategoryTable>
+            <CategoryLineItem>
+              <ItemDescription>Consumption charge</ItemDescription>
+              <ItemAmount>400.00</ItemAmount>
+            </CategoryLineItem>
+            <CategoryLineItem>
+              <ItemDescription>Sanitation charge</ItemDescription>
+              <ItemAmount>250.00</ItemAmount>
+            </CategoryLineItem>
+          </CategoryTable>
+        </CategoryType>
+        <CategoryType>
+          <CategoryName>Payments</CategoryName>
+          <CategoryTable>
+            <CategoryLineItem>
+              <ItemDescription>Payment received</ItemDescription>
+              <ItemAmount>500.00</ItemAmount>
+            </CategoryLineItem>
+          </CategoryTable>
+        </CategoryType>
+      </Body>
+    </Bill>
+  </xfa:data>
+</xfa:datasets>`;
+}
+
+function adobeFormPlaceholderLines(): string[] {
+  return [
+    "Please wait...",
+    "If this message is not eventually replaced by the proper contents of the document, your PDF viewer may not be able to display this type of document.",
+    "This document requires Adobe Reader 8 or higher.",
+    "For more assistance with Adobe forms, go to http://www.adobe.com/go/pdf_forms_configure.",
+  ];
 }
 
 function escapePdfText(value: string): string {
