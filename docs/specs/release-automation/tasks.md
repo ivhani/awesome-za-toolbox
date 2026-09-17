@@ -17,6 +17,6 @@
 - [x] Move the release component from `apps/cli` to the repository root.
 - [x] Synchronize the public CLI version from the root release train.
 - [x] Update workflow outputs for the root component.
-- [ ] Prove the already-merged parser feature produces a `0.2.0` release candidate.
-- [ ] Re-run repository, workflow, and security verification.
+- [x] Prove the already-merged parser feature produces a `0.2.0` release candidate.
+- [x] Re-run repository, workflow, and security verification.
 - [ ] Commit, push, and open the correction pull request.
