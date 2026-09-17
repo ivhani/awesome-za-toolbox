@@ -93,7 +93,7 @@ Feature branches must not edit package versions or create release tags. Use Conv
 - `feat!: ...` or another `!` type for a breaking release
 - `chore: ...`, `docs: ...`, and `test: ...` for changes that should not release by themselves
 
-Release Please maintains a separate release pull request after releasable changes land on `main`. Merging that release pull request updates `apps/cli/package.json` and `apps/cli/CHANGELOG.md`, creates a `za-toolbox-vX.Y.Z` tag and GitHub release, verifies the repository, and publishes the exact tagged version to npm through trusted publishing.
+Release Please treats the repository as one release train because the public CLI bundles the private workspace packages. After releasable changes land on `main`, it maintains a separate release pull request. Merging that pull request synchronizes the private root and public CLI versions, updates `apps/cli/CHANGELOG.md`, creates a `za-toolbox-vX.Y.Z` tag and GitHub release, verifies the repository, and publishes the exact tagged CLI version to npm through trusted publishing.
 
 Do not manually bump or republish an existing version. Preserve the `release-za-toolbox.yml` workflow filename because npm trusted publishing is bound to it.
 

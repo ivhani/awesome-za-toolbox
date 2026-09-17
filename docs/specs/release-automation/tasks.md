@@ -10,3 +10,13 @@
 - [x] Review job permissions and secret handling.
 - [x] Enable and verify required GitHub repository settings.
 - [x] Commit, push, and open a pull request to `main`.
+
+## Scope Correction
+
+- [x] Record the bundled-workspace path filtering failure.
+- [x] Move the release component from `apps/cli` to the repository root.
+- [x] Synchronize the public CLI version from the root release train.
+- [x] Update workflow outputs for the root component.
+- [x] Prove the already-merged parser feature produces a `0.2.0` release candidate.
+- [x] Re-run repository, workflow, and security verification.
+- [x] Commit, push, and open the correction pull request.

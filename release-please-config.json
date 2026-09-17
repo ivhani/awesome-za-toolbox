@@ -2,12 +2,19 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "bootstrap-sha": "f38fc637bc57c3587474caef53a34022e1b23dc2",
   "packages": {
-    "apps/cli": {
+    ".": {
       "release-type": "node",
       "package-name": "za-toolbox",
       "component": "za-toolbox",
       "include-component-in-tag": true,
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "apps/cli/CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "apps/cli/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
