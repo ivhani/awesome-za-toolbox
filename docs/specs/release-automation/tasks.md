@@ -19,4 +19,4 @@
 - [x] Update workflow outputs for the root component.
 - [x] Prove the already-merged parser feature produces a `0.2.0` release candidate.
 - [x] Re-run repository, workflow, and security verification.
-- [ ] Commit, push, and open the correction pull request.
+- [x] Commit, push, and open the correction pull request.
