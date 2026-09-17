@@ -9,4 +9,4 @@
 - [x] Run typecheck, tests, build, and production dependency audit.
 - [x] Review job permissions and secret handling.
 - [x] Enable and verify required GitHub repository settings.
-- [ ] Commit, push, and open a pull request to `main`.
+- [x] Commit, push, and open a pull request to `main`.
