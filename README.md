@@ -61,12 +61,9 @@ The project targets Node.js `>=22.14.0` for npm trusted publishing compatibility
 
 The first public package is `za-toolbox`. Internal `@awesome-za/*` workspace packages are private in v1 and bundled into the CLI package at build time.
 
-Publishing is configured through GitHub trusted publishing. After npm-side trusted publishing is configured for `za-toolbox`, push a tag like:
+Publishing is automated with Release Please and GitHub trusted publishing. Feature pull requests use Conventional Commit titles such as `feat: add a parser` or `fix: handle an empty statement`; feature branches do not edit package versions.
 
-```bash
-git tag za-toolbox-v0.1.0
-git push origin za-toolbox-v0.1.0
-```
+After releasable changes land on `main`, Release Please opens or updates a dedicated release pull request. Merging that pull request bumps the public package version, updates the changelog, creates the `za-toolbox-vX.Y.Z` tag and GitHub release, runs the full verification suite, and publishes the package to npm.
 
 ## Privacy rules
 
