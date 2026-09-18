@@ -4,13 +4,14 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parseEjoburgStatementText } from "@awesome-za/ejoburg";
-import { parseFnbStatementText } from "@awesome-za/fnb";
+import { parseFnbStatementTextResult } from "@awesome-za/fnb";
+import type { BankStatement } from "@awesome-za/schemas";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 test("parses sanitized FNB extracted-text fixture", async () => {
   const text = await readFile(path.join(repoRoot, "tests/fixtures/text/fnb-sanitized-layout.txt"), "utf8");
-  const parsed = parseFnbStatementText(text);
+  const parsed = expectFnbSuccess(text, "personal-current-account", "personal-current-standard-columns-v1");
 
   assert.equal(parsed.warnings.length, 1);
   assert.equal(parsed.warnings[0]?.code, "FNB_TRANSACTION_SKIPPED");
@@ -22,7 +23,7 @@ test("parses sanitized FNB extracted-text fixture", async () => {
 
 test("parses sanitized FNB current-account extracted layout", async () => {
   const text = await readFile(path.join(repoRoot, "tests/fixtures/text/fnb-current-account-extracted-layout.txt"), "utf8");
-  const parsed = parseFnbStatementText(text);
+  const parsed = expectFnbSuccess(text, "personal-current-account", "personal-current-compact-tax-invoice-v1");
 
   assert.equal(parsed.warnings.length, 0);
   assert.equal(parsed.statement.accountNumberMasked, "00000000000");
@@ -35,7 +36,7 @@ test("parses sanitized FNB current-account extracted layout", async () => {
 
 test("parses sanitized FNB business-account extracted layout", async () => {
   const text = await readFile(path.join(repoRoot, "tests/fixtures/text/fnb-business-account-extracted-layout.txt"), "utf8");
-  const parsed = parseFnbStatementText(text);
+  const parsed = expectFnbSuccess(text, "business-account", "business-compact-tax-invoice-v1");
 
   assert.equal(parsed.warnings.length, 0);
   assert.deepEqual(parsed.statement.period, { from: "2025-06-30", to: "2025-07-31" });
@@ -47,7 +48,7 @@ test("parses sanitized FNB business-account extracted layout", async () => {
 
 test("parses sanitized FNB home-loan extracted layout", async () => {
   const text = await readFile(path.join(repoRoot, "tests/fixtures/text/fnb-home-loan-extracted-layout.txt"), "utf8");
-  const parsed = parseFnbStatementText(text);
+  const parsed = expectFnbSuccess(text, "home-loan", "home-loan-transaction-history-v1");
 
   assert.equal(parsed.warnings.length, 0);
   assert.equal(parsed.statement.accountNumberMasked, "0-000-000-000-000");
@@ -92,3 +93,24 @@ test("reports Adobe dynamic-form eJoburg PDFs as unsupported extracted text", as
     /Adobe dynamic form/,
   );
 });
+
+function expectFnbSuccess(
+  text: string,
+  expectedFamily: string,
+  expectedStrategy: string,
+): { statement: BankStatement; warnings: { code: string; message: string }[] } {
+  const result = parseFnbStatementTextResult(text);
+  assert.equal(result.ok, true, result.errors[0]?.message);
+  assert.ok(result.data);
+  const metadata = result.metadata as typeof result.metadata & {
+    familyDetection: { family?: string };
+    strategies: { strategy: string; ok: boolean; provenance: { applicabilityEvidence: string[] } }[];
+    consolidation: { selectedStrategy?: string };
+  };
+  assert.equal(metadata.familyDetection.family, expectedFamily);
+  assert.equal(metadata.consolidation.selectedStrategy, expectedStrategy);
+  const selected = metadata.strategies.find((strategy) => strategy.strategy === expectedStrategy);
+  assert.equal(selected?.ok, true);
+  assert.equal((selected?.provenance.applicabilityEvidence.length ?? 0) > 0, true);
+  return { statement: result.data, warnings: result.warnings };
+}
