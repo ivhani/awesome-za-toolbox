@@ -42,3 +42,9 @@
 - Ambiguous PDFs recognized by both document families are held for review without a normalized selection; a future generic parser registry should replace the app-local dispatcher.
 - The native computer-use inventory was unavailable during verification, so visual inspection used the committed project-local Chromium capture harness rather than UI automation. The real Electron renderer was still launched and captured.
 - Electron Builder reports unbundled optional `@napi-rs/canvas` binaries for platforms other than the packaged Windows x64 target. The text/XFA/layout parsing paths do not require canvas, and the packaged application smoke passed.
+
+## Delivery
+
+- Feature branch: `feat/desktop-app`, based directly on refreshed `origin/main` in its own worktree.
+- Pull request: [#13 — feat: add local-first desktop application](https://github.com/ivhani/awesome-za-toolbox/pull/13).
+- The pull request is open and attached to the originating Codex task. It has not been merged or released.

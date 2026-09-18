@@ -15,4 +15,4 @@
 - [x] Update public and developer documentation.
 - [x] Run typecheck, full tests, build, package/smoke verification, production audit, and diff/privacy checks.
 - [x] Record final verification evidence and limitations.
-- [ ] Commit, push, open one focused pull request, and attach it to the task.
+- [x] Commit, push, open one focused pull request, and attach it to the task.
