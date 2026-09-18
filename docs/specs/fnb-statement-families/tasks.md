@@ -16,4 +16,4 @@
 - [x] Run `pnpm build`.
 - [x] Run `pnpm audit --prod`.
 - [x] Record sanitized verification evidence and remaining limitations.
-- [ ] Commit, push, open one focused pull request, and attach it to the task.
+- [x] Commit, push, open one focused pull request, and attach it to the task.
