@@ -1,6 +1,6 @@
 {
   "name": "awesome-za-toolbox-repo",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Local-first tools for converting South African documents into clean data.",
   "type": "module",
