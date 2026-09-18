@@ -114,6 +114,16 @@ test("extracts an embedded COJ XFA dataset from a compressed PDF stream", async 
   assert.match(xml, /<AccountNumber>999000111<\/AccountNumber>/);
 });
 
+test("extracts compressed XFA when the final payload byte is a carriage return", async () => {
+  const dir = await createTempDir("za-toolbox-ejoburg-xfa-cr-byte-");
+  const filePath = path.join(dir, "ejoburg-xfa-cr-byte.pdf");
+  await createSyntheticXfaPdf(filePath, syntheticCojXfaDataset(), undefined, { compressedFinalByte: 0x0d });
+
+  const xml = await extractPdfXfaDataset(filePath);
+
+  assert.match(xml, /<AccountNumber>999000111<\/AccountNumber>/);
+});
+
 test("parses a synthetic COJ XFA dynamic-form statement PDF", async () => {
   const dir = await createTempDir("za-toolbox-ejoburg-xfa-");
   const filePath = path.join(dir, "ejoburg-xfa.pdf");
@@ -162,6 +172,21 @@ test("parses XFA summary adjustments without duplicating detailed VAT", async ()
   assert.equal(result.data?.closingBalance, 565);
 });
 
+test("preserves signed XFA credit balance transfers as balance movements", async () => {
+  for (const [creditBalanceTransfer, totalDue] of [["2,206.66", "2,771.66"], ["-2,206.66", "-1,641.66"]]) {
+    const dir = await createTempDir("za-toolbox-ejoburg-xfa-credit-transfer-");
+    const filePath = path.join(dir, "ejoburg-xfa-credit-transfer.pdf");
+    await createSyntheticXfaPdf(filePath, syntheticCojXfaSummaryAdjustmentsDataset({ creditBalanceTransfer, totalDue }));
+
+    const result = await parseEjoburgStatement({ filePath });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.metadata.checks[0]?.status, "passed");
+    assert.deepEqual(result.data?.payments.map((item) => item.amount), [-500, Number(creditBalanceTransfer.replaceAll(",", "")), -50]);
+    assert.equal(result.data?.charges.some((item) => /credit balance transfer/i.test(item.description)), false);
+  }
+});
+
 test("rejects contradictory detailed and summary VAT in XFA statements", async () => {
   const dir = await createTempDir("za-toolbox-ejoburg-xfa-vat-mismatch-");
   const filePath = path.join(dir, "ejoburg-xfa-vat-mismatch.pdf");
@@ -192,6 +217,11 @@ test("extracts and parses positioned COJ tax-invoice text with the layout-aware 
   assert.equal(layoutResult?.statement?.openingBalance, -1303.11);
   assert.equal(layoutResult?.statement?.closingBalance, -499.22);
   assert.equal(layoutResult?.statement?.charges.length, 3);
+  assert.deepEqual(layoutResult?.statement?.charges.map((charge) => charge.description), [
+    "Property Rates: Basic charge (Billing Period 2026/06)",
+    "Property Rates: VAT 15%",
+    "PIKITUP: Refuse charge",
+  ]);
 
   const result = await parseEjoburgStatement({ filePath });
   assert.equal(result.ok, true);
@@ -372,14 +402,15 @@ function syntheticCojLayoutItems(): { text: string; x: number; y: number; size?:
     row(210, 670, "773.89"),
     row(390, 670, "30.00"),
     row(480, 670, "-499.22"),
-    row(50, 638, "Water and Sanitation VAT 1234567890 Sub - Total Total"),
-    row(50, 622, "Basic charge (Billing Period 2026/06)"),
-    row(430, 622, "200.00"),
-    row(50, 606, "VAT: 15%"),
-    row(430, 606, "30.00"),
-    row(50, 574, "PIKITUP"),
-    row(50, 558, "Refuse charge"),
-    row(430, 558, "573.89"),
+    row(50, 638, "VAT 4760117194 Sub - Total Total Amount"),
+    row(50, 622, "Property Rates"),
+    row(50, 606, "Basic charge (Billing Period 2026/06)"),
+    row(430, 606, "200.00"),
+    row(50, 590, "VAT: 15%"),
+    row(430, 590, "30.00"),
+    row(50, 558, "PIKITUP"),
+    row(50, 542, "Refuse charge"),
+    row(430, 542, "573.89"),
   ];
 }
 

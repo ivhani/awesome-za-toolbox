@@ -637,6 +637,16 @@ function appendXfaSummaryAdjustments(
       continue;
     }
 
+    if (/^credit balance transfer\b/i.test(normalized)) {
+      appendXfaAdjustment(lineItems.payments, {
+        date: fallbackDate,
+        description: "Credit Balance Transfer",
+        amount: entry.amount,
+        currency: "ZAR",
+      }, /\bcredit balance transfer\b/i);
+      continue;
+    }
+
     if (/^deposit released\b/i.test(normalized)) {
       appendXfaAdjustment(lineItems.payments, {
         date: fallbackDate,
@@ -803,6 +813,12 @@ function parseCojChargeLines(lines: string[], warnings: ParseWarning[], fallback
 
     if (/^VAT\s+\d{10}\s*Sub\s*-\s*Total\s*Total(?:\s*Amount)?$/i.test(line)) {
       category ??= "COJ Charges";
+      continue;
+    }
+
+    const standaloneCategory = line.match(/^(Property Rates|Electricity|Water(?:\s*(?:&|and)\s*Sanitation)?|Sewerage|Refuse)$/i);
+    if (standaloneCategory?.[1]) {
+      category = standaloneCategory[1];
       continue;
     }
 
