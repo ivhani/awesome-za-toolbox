@@ -4,14 +4,27 @@ Local-first, open-source tools for converting South African documents into clean
 
 ## MVP status
 
-This repository currently contains parser-only tooling:
+This repository currently contains local parser tooling and a desktop workspace:
 
 - FNB bank statement PDF to normalized JSON or CSV
 - eJoburg municipal statement PDF to normalized JSON or CSV
 - One published CLI package: `za-toolbox`
+- A Windows-first React/Electron desktop app under `apps/desktop`
 - Private workspace packages that can later become `@awesome-za/*` public packages
 
 No portal login, scraping, browser automation, credential storage, telemetry, or external AI processing is included.
+
+## Desktop app
+
+The desktop app processes every immediate file in a chosen folder, continues past individual failures, and presents ready, review, unsupported, and failed states in one stable table. Parsing and JSON/CSV export stay on the local computer.
+
+```bash
+corepack pnpm install
+corepack pnpm build
+corepack pnpm --filter @awesome-za/desktop dev
+```
+
+See [the desktop app README](apps/desktop/README.md) for architecture, privacy boundaries, checks, and unsigned Windows packaging.
 
 ## Future AI/OCR support
 
